@@ -17,6 +17,7 @@ from data_preparation import TrainingDataPreparator
 from training_engine import TrainingEngine
 from splits.split_strategies import DataSplitter
 from horizon_data_builder import HorizonDataBuilder
+from sweep_engine import SweepEngine
 sys.path.append(str(Path(__file__).parent.parent))
 from evaluation.metrics import format_metrics_table
 
@@ -29,6 +30,8 @@ class AppState:
         self.train_df = None
         self.test_df = None
         self.results = None
+        self.sweep_results = None
+        self.sweep_running = False
 
     def initialize(self):
         """Load and prepare data"""
@@ -506,6 +509,230 @@ def create_results_tab():
         refresh_btn.click(fn=load_results, outputs=[results_table, results_summary])
 
 
+# Tab 5: Parameter Sweep
+def create_sweep_tab():
+    """Create Tab 5: AutoML Parameter Sweep"""
+    with gr.Tab("5. Parameter Sweep"):
+        gr.Markdown("## 🔍 Automated Hyperparameter Search")
+        gr.Markdown("Randomized search over split strategies, features, targets, and horizons to find optimal configurations.")
+
+        with gr.Row():
+            with gr.Column(scale=1):
+                gr.Markdown("### Sweep Configuration")
+
+                n_iterations = gr.Slider(
+                    minimum=10,
+                    maximum=500,
+                    value=50,
+                    step=10,
+                    label="Number of Iterations",
+                    info="How many random configurations to try"
+                )
+
+                sweep_split_strategies = gr.CheckboxGroup(
+                    choices=["sequence", "date", "random"],
+                    value=["sequence"],
+                    label="Split Strategies to Try",
+                    info="Which train/test split methods to test"
+                )
+
+                sweep_train_ratio = gr.Slider(
+                    minimum=0.6,
+                    maximum=0.9,
+                    value=0.8,
+                    step=0.05,
+                    label="Train Ratio Range (will randomize ±10%)",
+                    info="Base train/test ratio"
+                )
+
+                sweep_feature_strategies = gr.CheckboxGroup(
+                    choices=["pca_only", "raw_only", "motion_temporal_only", "random_subset", "all_features"],
+                    value=["pca_only", "raw_only", "motion_temporal_only"],
+                    label="Feature Strategies",
+                    info="Which feature selection strategies to test"
+                )
+
+                sweep_targets = gr.CheckboxGroup(
+                    choices=["x_center", "y_center", "bbox_area", "mean_color"],
+                    value=["x_center", "y_center"],
+                    label="Prediction Targets",
+                    info="Which variables to predict"
+                )
+
+                sweep_horizons = gr.CheckboxGroup(
+                    choices=[1, 3, 6, 12],
+                    value=[1, 3, 6],
+                    label="Time Horizons",
+                    info="Which forecasting horizons to test"
+                )
+
+                sweep_models = gr.CheckboxGroup(
+                    choices=["random_forest", "xgboost", "lightgbm"],
+                    value=["random_forest", "xgboost"],
+                    label="Models to Try",
+                    info="Which model types to test"
+                )
+
+                with gr.Row():
+                    start_sweep_btn = gr.Button("🚀 Start Sweep", variant="primary")
+                    stop_sweep_btn = gr.Button("⏹️ Stop", variant="stop")
+                    export_sweep_btn = gr.Button("💾 Export Results")
+
+            with gr.Column(scale=2):
+                gr.Markdown("### Live Progress")
+
+                sweep_status = gr.Textbox(
+                    label="Status",
+                    value="Ready to start sweep",
+                    interactive=False,
+                    lines=1
+                )
+
+                sweep_progress = gr.Textbox(
+                    label="Progress Log",
+                    interactive=False,
+                    lines=20,
+                    value=""
+                )
+
+                gr.Markdown("### Top 10 Configurations")
+                leaderboard_table = gr.DataFrame(
+                    label="Leaderboard (sorted by Test R²)",
+                    interactive=False
+                )
+
+                best_config_display = gr.JSON(
+                    label="Best Configuration Details",
+                    value={}
+                )
+
+        def run_sweep(n_iter, split_strats, train_ratio, feat_strats, targets, horizons, models):
+            """Execute parameter sweep"""
+            try:
+                if state.full_data is None:
+                    return "❌ Please load data first (Tab 1)", "", None, {}
+
+                state.sweep_running = True
+
+                log = "="*80 + "\n"
+                log += "PARAMETER SWEEP STARTED\n"
+                log += "="*80 + "\n\n"
+
+                # Build config space
+                config_space = {
+                    'split_strategy': split_strats if split_strats else ['sequence'],
+                    'train_ratio': [max(0.6, train_ratio - 0.1), min(0.9, train_ratio + 0.1)],
+                    'features': {
+                        'strategies': feat_strats if feat_strats else ['all_features'],
+                        'min_features': 5,
+                        'max_features': sum(len(v) for v in state.feature_cols.values())
+                    },
+                    'target': targets if targets else ['x_center'],
+                    'horizon': horizons if horizons else [1, 3],
+                    'model': models if models else ['random_forest']
+                }
+
+                log += f"Config space:\n"
+                log += f"  Split strategies: {config_space['split_strategy']}\n"
+                log += f"  Train ratio range: {config_space['train_ratio']}\n"
+                log += f"  Feature strategies: {config_space['features']['strategies']}\n"
+                log += f"  Targets: {config_space['target']}\n"
+                log += f"  Horizons: {config_space['horizon']}\n"
+                log += f"  Models: {config_space['model']}\n\n"
+
+                # Create sweep engine
+                engine = SweepEngine(state.full_data, state.feature_cols)
+
+                # Progress callback
+                iteration_count = [0]
+
+                def progress_callback(i, best_r2, result):
+                    iteration_count[0] = i + 1
+                    nonlocal log
+
+                    test_r2 = result.get('test_r2', np.nan)
+                    error = result.get('error', None)
+
+                    if error:
+                        log += f"[{i+1}/{n_iter}] ✗ Error: {error}\n"
+                    else:
+                        log += f"[{i+1}/{n_iter}] Test R²={test_r2:.4f} (Best: {best_r2:.4f}) | "
+                        log += f"Model={result['model']}, Horizon=t+{result['horizon']}, "
+                        log += f"Features={result['n_features']}, Target={result['target']}\n"
+
+                # Run sweep
+                results_df = engine.run_sweep(
+                    config_space,
+                    n_iterations=int(n_iter),
+                    progress_callback=progress_callback
+                )
+
+                state.sweep_results = results_df
+                state.sweep_running = False
+
+                log += "\n" + "="*80 + "\n"
+                log += "SWEEP COMPLETE\n"
+                log += "="*80 + "\n"
+                log += f"Total iterations: {len(results_df)}\n"
+                log += f"Best Test R²: {engine.best_r2:.4f}\n\n"
+
+                # Get leaderboard
+                leaderboard = engine.get_leaderboard(top_k=10)
+
+                # Format for display
+                display_cols = ['iteration', 'model', 'horizon', 'target', 'n_features',
+                               'test_r2', 'test_rmse', 'train_r2', 'split_strategy']
+                leaderboard_display = leaderboard[display_cols].copy()
+                leaderboard_display['test_r2'] = leaderboard_display['test_r2'].apply(lambda x: f"{x:.4f}" if not np.isnan(x) else "NaN")
+                leaderboard_display['test_rmse'] = leaderboard_display['test_rmse'].apply(lambda x: f"{x:.4f}" if not np.isnan(x) else "NaN")
+                leaderboard_display['train_r2'] = leaderboard_display['train_r2'].apply(lambda x: f"{x:.4f}" if not np.isnan(x) else "NaN")
+
+                # Best config
+                best_config_json = {
+                    'model': engine.best_config.get('model', 'N/A'),
+                    'horizon': engine.best_config.get('horizon', 'N/A'),
+                    'target': engine.best_config.get('target', 'N/A'),
+                    'split_strategy': engine.best_config.get('split_strategy', 'N/A'),
+                    'train_ratio': f"{engine.best_config.get('train_ratio', 0):.2f}",
+                    'n_features': len(engine.best_config.get('features', [])),
+                    'test_r2': f"{engine.best_r2:.4f}"
+                }
+
+                status = f"✅ Sweep complete: {len(results_df)} iterations | Best R² = {engine.best_r2:.4f}"
+
+                return status, log, leaderboard_display, best_config_json
+
+            except Exception as e:
+                import traceback
+                state.sweep_running = False
+                error_msg = f"Error during sweep:\n{str(e)}\n\n{traceback.format_exc()}"
+                return f"❌ Error: {str(e)}", error_msg, None, {}
+
+        def export_sweep_results():
+            """Export sweep results to CSV"""
+            if state.sweep_results is None:
+                return "❌ No sweep results to export"
+
+            try:
+                output_path = Path(__file__).parent / "sweep_results.csv"
+                state.sweep_results.to_csv(output_path, index=False)
+                return f"✅ Exported {len(state.sweep_results)} results to {output_path}"
+            except Exception as e:
+                return f"❌ Export failed: {str(e)}"
+
+        start_sweep_btn.click(
+            fn=run_sweep,
+            inputs=[n_iterations, sweep_split_strategies, sweep_train_ratio,
+                   sweep_feature_strategies, sweep_targets, sweep_horizons, sweep_models],
+            outputs=[sweep_status, sweep_progress, leaderboard_table, best_config_display]
+        )
+
+        export_sweep_btn.click(
+            fn=export_sweep_results,
+            outputs=[sweep_status]
+        )
+
+
 # Main App
 def create_app():
     """Create the main Gradio app"""
@@ -518,6 +745,7 @@ def create_app():
         models_selector, target_selector, horizons_selector, lookback_slider, split_strategy, train_ratio_slider = create_config_tab(feature_selector)
         create_training_tab(feature_selector, models_selector, target_selector, horizons_selector)
         create_results_tab()
+        create_sweep_tab()
 
         gr.Markdown("---")
         gr.Markdown("*Powered by Gradio | Data: GOES-18 ABI Satellite Imagery*")
