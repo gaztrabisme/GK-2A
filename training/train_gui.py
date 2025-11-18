@@ -578,6 +578,13 @@ def create_sweep_tab():
                     stop_sweep_btn = gr.Button("⏹️ Stop", variant="stop")
                     export_sweep_btn = gr.Button("💾 Export Results")
 
+                export_status = gr.Textbox(
+                    label="Export Status",
+                    value="",
+                    interactive=False,
+                    lines=2
+                )
+
             with gr.Column(scale=2):
                 gr.Markdown("### Live Progress")
 
@@ -729,7 +736,7 @@ def create_sweep_tab():
 
         export_sweep_btn.click(
             fn=export_sweep_results,
-            outputs=[sweep_status]
+            outputs=[export_status]
         )
 
 
