@@ -1,0 +1,38 @@
+pca_results:
+  spatial_pca:
+    component_names:
+    - PC1_spatial
+    - PC2_spatial
+    - PC3_spatial
+    - PC4_spatial
+    cumulative_variance: 98.4045622896052
+    explained_variance_ratio:
+    - 0.4100297410576238
+    - 0.3109060920912376
+    - 0.21064078686419882
+    - 0.05246900288299183
+    feature_names:
+    - bbox_width
+    - bbox_height
+    - bbox_area
+    - aspect_ratio
+    - x_center
+    - y_center
+    n_components: 4
+    output_prefix: PC_spatial
+  thermal_pca:
+    component_names:
+    - PC1_thermal
+    - PC2_thermal
+    cumulative_variance: 68.3841436916327
+    explained_variance_ratio:
+    - 0.44700251679396685
+    - 0.23683892012236024
+    feature_names:
+    - mean_color
+    - max_color
+    - min_color
+    - std_color
+    - color_gradient
+    n_components: 2
+    output_prefix: PC_thermal

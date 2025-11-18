@@ -1,0 +1,23 @@
+{
+  "combined_date": "2025-11-18T08:56:55.384967",
+  "source_directory": "data/raw/Hurricane.v3i.yolov8",
+  "output_directory": "data/raw/combined",
+  "statistics": {
+    "total_images": 822,
+    "total_labels": 822,
+    "splits": {
+      "train": {
+        "images": 576,
+        "labels": 576
+      },
+      "valid": {
+        "images": 164,
+        "labels": 164
+      },
+      "test": {
+        "images": 82,
+        "labels": 82
+      }
+    }
+  }
+}

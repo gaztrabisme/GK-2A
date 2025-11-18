@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Data files (keep structure but ignore large data)
+data/raw/Hurricane.v3i.yolov8/
+data/raw/combined/images/
+data/raw/combined/labels/
+*.jpg
+*.png
+*.jpeg
+
+# Cache
+cache/
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model files (can be large)
+*.h5
+*.hdf5
+training/trained_models/*.pkl
+
+# Logs
+*.log

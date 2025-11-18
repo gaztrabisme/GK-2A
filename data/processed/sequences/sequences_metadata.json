@@ -1,0 +1,109 @@
+{
+  "total_sequences": 8,
+  "sequences": [
+    {
+      "sequence_id": "seq_001",
+      "start_time": "2023-10-15T21:00:00",
+      "end_time": "2023-10-16T00:40:00",
+      "duration": "0 days 03:40:00",
+      "num_frames": 23,
+      "stats": {
+        "mean_storms_per_frame": 1.9565217391304348,
+        "total_storm_detections": 45,
+        "mean_gap_minutes": 10.0,
+        "max_gap_minutes": 10.0
+      }
+    },
+    {
+      "sequence_id": "seq_002",
+      "start_time": "2023-10-16T01:00:00",
+      "end_time": "2023-10-16T04:20:00",
+      "duration": "0 days 03:20:00",
+      "num_frames": 21,
+      "stats": {
+        "mean_storms_per_frame": 1.2380952380952381,
+        "total_storm_detections": 26,
+        "mean_gap_minutes": 10.0,
+        "max_gap_minutes": 10.0
+      }
+    },
+    {
+      "sequence_id": "seq_003",
+      "start_time": "2023-10-16T04:40:00",
+      "end_time": "2023-10-16T06:00:00",
+      "duration": "0 days 01:20:00",
+      "num_frames": 9,
+      "stats": {
+        "mean_storms_per_frame": 1.4444444444444444,
+        "total_storm_detections": 13,
+        "mean_gap_minutes": 10.0,
+        "max_gap_minutes": 10.0
+      }
+    },
+    {
+      "sequence_id": "seq_004",
+      "start_time": "2023-10-16T06:20:00",
+      "end_time": "2023-10-16T06:30:00",
+      "duration": "0 days 00:10:00",
+      "num_frames": 2,
+      "stats": {
+        "mean_storms_per_frame": 1.0,
+        "total_storm_detections": 2,
+        "mean_gap_minutes": 10.0,
+        "max_gap_minutes": 10.0
+      }
+    },
+    {
+      "sequence_id": "seq_005",
+      "start_time": "2023-10-16T06:50:00",
+      "end_time": "2023-10-17T02:50:00",
+      "duration": "0 days 20:00:00",
+      "num_frames": 121,
+      "stats": {
+        "mean_storms_per_frame": 2.28099173553719,
+        "total_storm_detections": 276,
+        "mean_gap_minutes": 10.0,
+        "max_gap_minutes": 10.0
+      }
+    },
+    {
+      "sequence_id": "seq_006",
+      "start_time": "2023-10-17T03:10:00",
+      "end_time": "2023-10-17T12:40:00",
+      "duration": "0 days 09:30:00",
+      "num_frames": 58,
+      "stats": {
+        "mean_storms_per_frame": 3.2758620689655173,
+        "total_storm_detections": 190,
+        "mean_gap_minutes": 10.0,
+        "max_gap_minutes": 10.0
+      }
+    },
+    {
+      "sequence_id": "seq_007",
+      "start_time": "2023-10-17T13:00:00",
+      "end_time": "2023-10-17T14:40:00",
+      "duration": "0 days 01:40:00",
+      "num_frames": 11,
+      "stats": {
+        "mean_storms_per_frame": 3.909090909090909,
+        "total_storm_detections": 43,
+        "mean_gap_minutes": 10.0,
+        "max_gap_minutes": 10.0
+      }
+    },
+    {
+      "sequence_id": "seq_008",
+      "start_time": "2023-10-17T15:00:00",
+      "end_time": "2023-10-21T14:20:00",
+      "duration": "3 days 23:20:00",
+      "num_frames": 573,
+      "stats": {
+        "mean_storms_per_frame": 3.4589877835951133,
+        "total_storm_detections": 1982,
+        "mean_gap_minutes": 10.0,
+        "max_gap_minutes": 10.0
+      }
+    }
+  ]
+}

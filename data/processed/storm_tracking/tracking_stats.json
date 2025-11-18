@@ -1,0 +1,17 @@
+{
+  "total_sequences": 8,
+  "total_tracks": 94,
+  "tracks_per_sequence": [
+    3,
+    1,
+    1,
+    0,
+    14,
+    12,
+    5,
+    58
+  ],
+  "longest_track": 289,
+  "mean_track_length": 25.638297872340427,
+  "min_track_length": 3
+}

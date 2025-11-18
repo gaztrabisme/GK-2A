@@ -1,0 +1,302 @@
+# Feature Engineering Metadata
+# Defines all feature groups, dependencies, and specifications
+
+feature_groups:
+  spatial:
+    description: "Spatial features derived from YOLO bounding boxes"
+    source: "preprocessing/2_extract_yolo_features.py"
+    output_file: "data/processed/features/spatial_features.parquet"
+    requires: []
+    min_frames: 1
+    features:
+      - name: x_center
+        type: float
+        range: [0.0, 1.0]
+        description: "Storm center X coordinate (normalized)"
+        unit: "normalized"
+
+      - name: y_center
+        type: float
+        range: [0.0, 1.0]
+        description: "Storm center Y coordinate (normalized)"
+        unit: "normalized"
+
+      - name: bbox_width
+        type: float
+        range: [0.0, 1.0]
+        description: "Bounding box width (normalized)"
+        unit: "normalized"
+
+      - name: bbox_height
+        type: float
+        range: [0.0, 1.0]
+        description: "Bounding box height (normalized)"
+        unit: "normalized"
+
+      - name: bbox_area
+        type: float
+        range: [0.0, 1.0]
+        description: "Bounding box area (width × height)"
+        unit: "normalized"
+        derived_from: [bbox_width, bbox_height]
+
+      - name: aspect_ratio
+        type: float
+        range: [0.0, null]
+        description: "Bounding box aspect ratio (width / height)"
+        unit: "ratio"
+        derived_from: [bbox_width, bbox_height]
+
+  thermal:
+    description: "Thermal features extracted from satellite image pixels within bounding boxes"
+    source: "preprocessing/3_extract_thermal_features.py"
+    output_file: "data/processed/features/thermal_features.parquet"
+    requires: []
+    min_frames: 1
+    features:
+      - name: mean_color
+        type: float
+        range: [0.0, 255.0]
+        description: "Mean pixel color value within bbox"
+        unit: "grayscale (0-255)"
+
+      - name: max_color
+        type: float
+        range: [0.0, 255.0]
+        description: "Maximum pixel color value within bbox"
+        unit: "grayscale (0-255)"
+
+      - name: min_color
+        type: float
+        range: [0.0, 255.0]
+        description: "Minimum pixel color value within bbox"
+        unit: "grayscale (0-255)"
+
+      - name: std_color
+        type: float
+        range: [0.0, null]
+        description: "Standard deviation of pixel colors (storm intensity proxy)"
+        unit: "grayscale"
+
+      - name: color_gradient
+        type: float
+        range: [null, null]
+        description: "Difference between center (50%) and edge pixel means"
+        unit: "grayscale"
+        derived_from: [mean_color]
+
+  motion:
+    description: "Motion features derived from tracked storm positions"
+    source: "features/motion.py"
+    output_file: "data/processed/features/motion_features.parquet"
+    requires: ["storm_tracking"]
+    min_frames: 2
+    features:
+      - name: velocity_x
+        type: float
+        range: [null, null]
+        description: "Storm velocity in X direction"
+        unit: "pixels/frame"
+        requires_frames: 2
+
+      - name: velocity_y
+        type: float
+        range: [null, null]
+        description: "Storm velocity in Y direction"
+        unit: "pixels/frame"
+        requires_frames: 2
+
+      - name: speed
+        type: float
+        range: [0.0, null]
+        description: "Magnitude of velocity vector"
+        unit: "pixels/frame"
+        requires_frames: 2
+        derived_from: [velocity_x, velocity_y]
+
+      - name: direction
+        type: float
+        range: [-180.0, 180.0]
+        description: "Direction of movement (angle in degrees)"
+        unit: "degrees"
+        requires_frames: 2
+        derived_from: [velocity_x, velocity_y]
+
+      - name: acceleration_x
+        type: float
+        range: [null, null]
+        description: "Acceleration in X direction"
+        unit: "pixels/frame²"
+        requires_frames: 3
+
+      - name: acceleration_y
+        type: float
+        range: [null, null]
+        description: "Acceleration in Y direction"
+        unit: "pixels/frame²"
+        requires_frames: 3
+
+      - name: acceleration
+        type: float
+        range: [0.0, null]
+        description: "Magnitude of acceleration vector"
+        unit: "pixels/frame²"
+        requires_frames: 3
+        derived_from: [acceleration_x, acceleration_y]
+
+  temporal:
+    description: "Temporal delta features (frame-to-frame changes)"
+    source: "features/temporal.py"
+    output_file: "data/processed/features/temporal_features.parquet"
+    requires: ["storm_tracking", "motion"]
+    min_frames: 2
+    features:
+      - name: delta_area
+        type: float
+        range: [null, null]
+        description: "Change in bounding box area from previous frame"
+        unit: "normalized"
+        requires_frames: 2
+
+      - name: delta_mean_color
+        type: float
+        range: [null, null]
+        description: "Change in mean pixel color from previous frame"
+        unit: "grayscale"
+        requires_frames: 2
+
+      - name: delta_std_color
+        type: float
+        range: [null, null]
+        description: "Change in color std deviation from previous frame"
+        unit: "grayscale"
+        requires_frames: 2
+
+      - name: delta_speed
+        type: float
+        range: [null, null]
+        description: "Change in speed from previous frame"
+        unit: "pixels/frame"
+        requires_frames: 3
+
+# PCA Configuration
+pca_groups:
+  thermal_pca:
+    description: "PCA on correlated thermal features"
+    input_features:
+      - mean_color
+      - max_color
+      - min_color
+      - std_color
+      - color_gradient
+    method: "elbow_second_derivative"
+    variance_threshold: 0.95
+    standardize: true
+    output_prefix: "PC_thermal"
+
+  spatial_pca:
+    description: "PCA on correlated spatial features"
+    input_features:
+      - bbox_width
+      - bbox_height
+      - bbox_area
+      - aspect_ratio
+      - x_center
+      - y_center
+    method: "elbow_second_derivative"
+    variance_threshold: 0.95
+    standardize: true
+    output_prefix: "PC_spatial"
+
+# Features NOT subject to PCA (preserve temporal meaning)
+raw_features:
+  motion:
+    - velocity_x
+    - velocity_y
+    - speed
+    - direction
+    - acceleration_x
+    - acceleration_y
+    - acceleration
+
+  temporal:
+    - delta_area
+    - delta_mean_color
+    - delta_std_color
+    - delta_speed
+
+# Prediction Targets
+prediction_targets:
+  position:
+    features:
+      - x_center
+      - y_center
+    description: "Storm position (normalized coordinates)"
+
+  size:
+    features:
+      - bbox_area
+    description: "Storm size (normalized area)"
+
+  intensity:
+    features:
+      - mean_color
+      # Alternative: std_color
+    description: "Storm intensity (thermal proxy)"
+
+# Time Horizons for Multi-Horizon Forecasting
+time_horizons:
+  - name: t+1
+    frames_ahead: 1
+    real_time: "10 minutes"
+    use_case: "Immediate nowcasting"
+
+  - name: t+3
+    frames_ahead: 3
+    real_time: "30 minutes"
+    use_case: "Short-term warning"
+
+  - name: t+6
+    frames_ahead: 6
+    real_time: "1 hour"
+    use_case: "Tactical planning"
+
+  - name: t+12
+    frames_ahead: 12
+    real_time: "2 hours"
+    use_case: "Strategic forecasting"
+
+# Lookback Window
+lookback:
+  default_frames: 6
+  default_duration: "1 hour"
+  min_frames: 3
+  max_frames: 12
+  description: "Number of historical frames used as input for predictions"
+
+# Data Statistics (from preprocessing outputs)
+dataset_statistics:
+  total_images: 822
+  total_bboxes: 2577
+  total_sequences: 8
+  total_frames: 818
+  total_tracks: 94
+  longest_track_frames: 289
+
+  features:
+    spatial:
+      total_samples: 2577
+
+    thermal:
+      total_samples: 2577
+
+    motion:
+      total_samples: 2410
+      valid_velocity: 2316
+      valid_acceleration: 2222
+
+    temporal:
+      total_samples: 2410
+      valid_delta_area: 2316
+      valid_delta_thermal: 2316
+      valid_delta_speed: 2149
