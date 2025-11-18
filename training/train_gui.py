@@ -172,7 +172,7 @@ def create_config_tab(feature_selector):
         with gr.Row():
             models_selector = gr.CheckboxGroup(
                 label="Models to Train",
-                choices=["Random Forest"],  # Only RF for now
+                choices=["Random Forest", "XGBoost", "LightGBM"],
                 value=["Random Forest"]
             )
 
@@ -335,17 +335,17 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                 log += f"  Horizons: {horizons}\n"
                 log += f"  Models: {selected_models}\n\n"
 
-                # Parse horizon values
+                # Parse horizon values (check longer strings first to avoid substring matches)
                 horizon_values = []
                 for h in horizons:
-                    if "t+1" in h:
-                        horizon_values.append(1)
-                    elif "t+3" in h:
-                        horizon_values.append(3)
+                    if "t+12" in h:
+                        horizon_values.append(12)
                     elif "t+6" in h:
                         horizon_values.append(6)
-                    elif "t+12" in h:
-                        horizon_values.append(12)
+                    elif "t+3" in h:
+                        horizon_values.append(3)
+                    elif "t+1" in h:
+                        horizon_values.append(1)
 
                 if not horizon_values:
                     return "Please select at least one time horizon (Tab 2)", "❌ No horizons selected"
