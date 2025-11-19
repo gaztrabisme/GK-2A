@@ -60,3 +60,23 @@ training/trained_models/*.pkl
 
 # Logs
 *.log
+
+# Node.js / Frontend
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.env.local
+.env*.local
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+
+# Gradio
+.gradio/
+
+# Package managers
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

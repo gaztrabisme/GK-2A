@@ -36,7 +36,31 @@ pip install -r requirements.txt
 
 ### 2. View Interactive Visualization 🎨
 
-**Launch the forecast visualization GUI:**
+**Option A: Modern Web Interface (Recommended)**
+
+Terminal 1 - Start Backend API:
+```bash
+python -m backend.main
+```
+Backend runs at http://localhost:8000
+
+Terminal 2 - Start Frontend:
+```bash
+cd frontend
+npm install  # First time only
+npm run dev
+```
+Frontend runs at http://localhost:3000
+
+**Features:**
+- Deck.gl WebGL satellite viewer with smooth pan/zoom
+- Real-time prediction overlay on 642 test frames
+- Timeline controls with playback (1-30 FPS)
+- Layer toggles for each prediction horizon
+- Error metrics panel with expandable storm details
+- Keyboard shortcuts: ←/→ (navigate), Space (play/pause)
+
+**Option B: Legacy Gradio Interface**
 
 ```bash
 python visualization/gradio_app.py
@@ -82,6 +106,33 @@ GK-2A/
 ├── CLAUDE.md                          # Complete pipeline specifications
 ├── README.md                          # This file
 ├── requirements.txt                   # Python dependencies
+│
+├── backend/                           # FastAPI REST API
+│   ├── main.py                        # API entry point
+│   ├── models/schemas.py              # Pydantic data models
+│   ├── routers/frames.py              # Frame endpoints
+│   ├── services/data_service.py       # Business logic
+│   └── README.md                      # API documentation
+│
+├── frontend/                          # Next.js web application
+│   ├── app/                           # Next.js App Router
+│   │   ├── page.tsx                   # Main application page
+│   │   ├── layout.tsx                 # Root layout
+│   │   └── globals.css                # Global styles
+│   ├── components/                    # React components
+│   │   ├── Map/
+│   │   │   └── SatelliteViewer.tsx    # Deck.gl satellite viewer
+│   │   ├── Controls/
+│   │   │   ├── TimelineControls.tsx   # Frame navigation & playback
+│   │   │   └── LayerControls.tsx      # Prediction layer toggles
+│   │   └── Metrics/
+│   │       └── ErrorPanel.tsx         # Error metrics display
+│   ├── lib/                           # Utilities & shared code
+│   │   ├── api.ts                     # API client
+│   │   ├── store.ts                   # Zustand state management
+│   │   └── types.ts                   # TypeScript types
+│   ├── package.json                   # Node.js dependencies
+│   └── .env.local                     # Environment variables
 │
 ├── data/
 │   ├── raw/
@@ -209,7 +260,21 @@ GK-2A/
 - LightGBM (high-performance GBDT + stacking)
 - NumPy, Pandas (data processing)
 
-**Visualization**:
+**Backend API**:
+- FastAPI (async Python web framework)
+- Uvicorn (ASGI server)
+- Pydantic (data validation)
+
+**Frontend**:
+- Next.js 16 (React framework with App Router)
+- TypeScript (type-safe JavaScript)
+- Deck.gl (WebGL geospatial visualization)
+- TailwindCSS (utility-first CSS)
+- Zustand (state management)
+- Axios (HTTP client)
+- Lucide React (icons)
+
+**Visualization (Legacy)**:
 - Gradio (web interface)
 - Plotly (interactive plots)
 - OpenCV (image processing)

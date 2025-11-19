@@ -701,7 +701,120 @@ GK-2A/
 
 ## 12. Visualization GUI
 
-### Interactive Forecast Visualization
+### Modern Web Interface (Recommended)
+
+**Architecture**: Next.js + TypeScript + FastAPI
+
+**Location**:
+- Backend: `backend/` (FastAPI REST API)
+- Frontend: `frontend/` (Next.js application)
+
+**Running the Application**:
+
+Terminal 1 - Start Backend:
+```bash
+python -m backend.main
+```
+Runs at http://localhost:8000
+
+Terminal 2 - Start Frontend:
+```bash
+cd frontend
+npm run dev
+```
+Runs at http://localhost:3000
+
+**Technology Stack**:
+
+*Backend (FastAPI)*:
+- FastAPI - Modern async Python web framework
+- Uvicorn - ASGI server
+- Pydantic - Data validation with type hints
+- CORS enabled for frontend communication
+
+*Frontend (Next.js)*:
+- Next.js 16 - React framework with App Router
+- TypeScript - Type-safe JavaScript
+- Deck.gl - WebGL geospatial visualization library
+- OrthographicView - 2D image viewer optimized for satellite imagery
+- TailwindCSS - Utility-first CSS framework
+- Zustand - Lightweight state management
+- Axios - HTTP client for API requests
+- Lucide React - Icon library
+
+**Features**:
+- **Deck.gl WebGL Satellite Viewer**
+  - Smooth pan/zoom with OrthographicView
+  - Optimized for 678x678 pixel satellite images
+  - Real-time layer rendering
+
+- **Interactive Controls**
+  - Timeline slider for 642 frames
+  - Playback with adjustable speed (1-30 FPS)
+  - Keyboard shortcuts: ←/→ (navigate), Space (play/pause)
+  - Skip forward/backward (10 frames)
+
+- **Layer Management**
+  - Toggle current storm positions (magenta boxes)
+  - Toggle ground truth paths (white lines)
+  - Toggle predictions by horizon (t+1, t+3, t+6, t+12)
+  - Color-coded trajectories with confidence scores
+
+- **Error Metrics Panel**
+  - Expandable storm cards
+  - Per-horizon error breakdown
+  - Position error as % of image size
+  - Distance estimates in kilometers
+  - Color-coded error levels (green<1%, yellow 1-2%, red>2%)
+
+**API Endpoints**:
+- `GET /api/frames/metadata` - Dataset overview
+- `GET /api/frames/{id}` - Frame data with predictions
+- `GET /api/frames/{id}/image` - Satellite image
+- API docs at http://localhost:8000/api/docs
+
+**Component Architecture**:
+```
+frontend/
+├── app/page.tsx                    # Main application layout
+├── components/
+│   ├── Map/
+│   │   └── SatelliteViewer.tsx     # Deck.gl viewer with layers
+│   ├── Controls/
+│   │   ├── TimelineControls.tsx    # Frame navigation & playback
+│   │   └── LayerControls.tsx       # Prediction layer toggles
+│   └── Metrics/
+│       └── ErrorPanel.tsx          # Error metrics display
+└── lib/
+    ├── api.ts                      # API client (Axios)
+    ├── store.ts                    # State management (Zustand)
+    └── types.ts                    # TypeScript interfaces
+```
+
+**State Management** (Zustand):
+```typescript
+{
+  currentFrame: number,
+  totalFrames: number,
+  frameData: FrameResponse | null,
+  metadata: MetadataResponse | null,
+  visibleHorizons: Set<Horizon>,
+  showCurrent: boolean,
+  showActual: boolean,
+  isPlaying: boolean,
+  playbackSpeed: number,
+  // Actions...
+}
+```
+
+**Data Flow**:
+1. User interacts with controls (timeline, layers)
+2. Zustand store updates state
+3. React components re-render
+4. API client fetches new data if needed
+5. Deck.gl layers update based on new state
+
+### Legacy Gradio Interface
 
 **Location**: `visualization/gradio_app.py`
 
