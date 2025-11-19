@@ -409,26 +409,24 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                         log += f"  Train: {X_train.shape[0]} samples\n"
                         log += f"  Test: {X_test.shape[0]} samples\n\n"
 
-                        # Train models for this horizon
-                        for model_name in model_names:
-                            log += f"Training {model_name} for t+{horizon}...\n"
+                        # Train all models for this horizon (includes ensemble)
+                        def progress_callback(msg):
+                            nonlocal log
+                            log += "  " + msg + "\n"
 
-                            def progress_callback(msg):
-                                nonlocal log
-                                log += "  " + msg + "\n"
+                        horizon_results = engine.train_all_models(
+                            X_train, y_train, X_test, y_test,
+                            feature_names=feature_names,
+                            model_names=model_names,
+                            target_name=target_col,
+                            progress_callback=progress_callback,
+                            enable_ensemble=True
+                        )
 
-                            result = engine.train_single_model(
-                                model_name, X_train, y_train, X_test, y_test,
-                                feature_names=feature_names,
-                                model_params=None
-                            )
-
-                            # Store with horizon key
+                        # Store results with horizon keys
+                        for model_name, result in horizon_results.items():
                             result_key = f"{model_name}_t{horizon}"
                             all_results[result_key] = result
-
-                            metrics = result['metrics']
-                            log += f"  ✓ Test RMSE: {metrics['test_rmse']:.4f}, R²: {metrics['test_r2']:.4f}\n\n"
 
                     except Exception as e:
                         log += f"  ✗ Error for t+{horizon}: {str(e)}\n\n"

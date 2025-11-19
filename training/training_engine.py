@@ -15,6 +15,7 @@ sys.path.append(str(Path(__file__).parent))
 
 from models.tree_models import TreeModelFactory, get_feature_importance
 from splits.split_strategies import DataSplitter
+from ensemble import VotingEnsemble
 sys.path.append(str(Path(__file__).parent.parent))
 from evaluation.metrics import evaluate_model, calculate_metrics
 
@@ -80,7 +81,8 @@ class TrainingEngine:
         feature_names: List[str],
         model_names: List[str],
         target_name: str = "target",
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        enable_ensemble: bool = True
     ) -> Dict:
         """
         Train multiple models and compare results.
@@ -92,11 +94,13 @@ class TrainingEngine:
             model_names: List of model names to train
             target_name: Name of target variable (for saving)
             progress_callback: Optional function(message) to report progress
+            enable_ensemble: If True, create voting ensemble from trained models
 
         Returns:
-            Dictionary mapping model names to results
+            Dictionary mapping model names to results (includes 'ensemble' if enabled)
         """
         results = {}
+        trained_models = {}
 
         for i, model_name in enumerate(model_names):
             if progress_callback:
@@ -107,6 +111,7 @@ class TrainingEngine:
                     model_name, X_train, y_train, X_test, y_test, feature_names
                 )
                 results[model_name] = result
+                trained_models[model_name] = result['model']
 
                 if progress_callback:
                     progress_callback(
@@ -118,6 +123,32 @@ class TrainingEngine:
                 if progress_callback:
                     progress_callback(f"✗ {model_name} failed: {str(e)}")
                 results[model_name] = {'error': str(e)}
+
+        # Create ensemble if enabled and we have multiple successful models
+        if enable_ensemble and len(trained_models) >= 2:
+            if progress_callback:
+                progress_callback(f"Creating voting ensemble from {len(trained_models)} models...")
+
+            try:
+                ensemble = VotingEnsemble(trained_models)
+                ensemble_metrics = ensemble.evaluate(X_train, y_train, X_test, y_test)
+
+                results['ensemble'] = {
+                    'model': ensemble,
+                    'metrics': ensemble_metrics,
+                    'train_time': 0.0  # Ensemble uses pre-trained models
+                }
+
+                if progress_callback:
+                    progress_callback(
+                        f"✓ Ensemble: Test RMSE={ensemble_metrics['test_rmse']:.4f}, "
+                        f"R²={ensemble_metrics['test_r2']:.4f}"
+                    )
+
+            except Exception as e:
+                if progress_callback:
+                    progress_callback(f"✗ Ensemble failed: {str(e)}")
+                results['ensemble'] = {'error': str(e)}
 
         return results
 
