@@ -614,6 +614,12 @@ GK-2A/
 - Visualization
 - Report generation
 
+**Step 8**: Interactive Visualization GUI ✅ **COMPLETED**
+- Gradio + Plotly interface for zoomable satellite imagery
+- Real-time prediction overlay on test set
+- Error metrics display and analysis
+- Public sharing capability (ngrok/Gradio share)
+
 ### Phase 2: Deep Learning (Future)
 - LSTM implementation
 - Transformer experiments (if data grows)
@@ -675,12 +681,14 @@ GK-2A/
 - ✅ Training GUI functional
 - ✅ 3 tree models trained on at least t+1, t+3
 - ✅ Evaluation metrics + basic visualizations
+- ✅ Interactive forecast visualization GUI with zoom capability
 
-### Performance Targets (Phase 1)
-- **t+1 (10 min)**: Test R² > 0.75 for position
-- **t+3 (30 min)**: Test R² > 0.60 for position
-- **t+6 (1 hour)**: Test R² > 0.45 for position
-- **Training time**: <5 minutes per model on laptop
+### Performance Targets (Phase 1) ✅ **ACHIEVED**
+- ✅ **t+1 (10 min)**: Test R² = 0.862 (LightGBM Stacking) > 0.75 target
+- ✅ **t+3 (30 min)**: Test R² = 0.817 (LightGBM Stacking) > 0.60 target
+- ✅ **t+6 (1 hour)**: Test R² = 0.761 (LightGBM Stacking) > 0.45 target
+- ✅ **t+12 (2 hours)**: Test R² = 0.595 (LightGBM baseline)
+- ✅ **Training time**: <5 minutes per model on laptop
 
 ### Phase 2 Targets
 - LSTM outperforms tree models on t+6, t+12
@@ -689,5 +697,59 @@ GK-2A/
 
 ---
 
-*Last Updated: 2025-11-17*
-*Status: Phase 1 - Foundation in progress*
+---
+
+## 12. Visualization GUI
+
+### Interactive Forecast Visualization
+
+**Location**: `visualization/gradio_app.py`
+
+**Features**:
+- **Zoomable satellite imagery** using Plotly for interactive pan/zoom
+- **Real-time prediction overlay** on test set (642 frames, Oct 17-21, 2023)
+- **Multi-horizon forecasts**: t+1 (10min), t+3 (30min), t+6 (1hr), t+12 (2hrs)
+- **Color-coded trajectories**:
+  - Magenta boxes: Current storm positions (YOLO detections)
+  - White lines: Actual future paths (ground truth)
+  - Purple dots: t+1 predictions (86% confidence)
+  - Bright green dots: t+3 predictions (82% confidence)
+  - Pink dots: t+6 predictions (76% confidence)
+  - Cyan dots: t+12 predictions (59% confidence)
+- **Error metrics**: Position offset % (1% ≈ 75-100 km on full Earth disk)
+- **Interactive controls**: Timeline slider, prev/next navigation, toggle predictions
+
+**Running the GUI**:
+```bash
+python visualization/gradio_app.py
+```
+
+**Public sharing**:
+- **Option 1**: Gradio share (built-in, 72-hour temporary link)
+  - Already enabled with `share=True` in code
+  - Public URL appears in terminal output
+
+- **Option 2**: ngrok (persistent with account)
+  ```bash
+  # Install
+  brew install ngrok/ngrok/ngrok
+
+  # Get token from https://dashboard.ngrok.com/get-started/your-authtoken
+  ngrok config add-authtoken YOUR_TOKEN
+
+  # Start app
+  python visualization/gradio_app.py
+
+  # In new terminal
+  ngrok http 7862
+  ```
+
+**Data Structure**:
+- Test set: 2101 samples, 642 frames, 3 sequences
+- Date range: Oct 17-21, 2023
+- 100% image coverage (642/642 satellite images found)
+
+---
+
+*Last Updated: 2025-11-19*
+*Status: Phase 1 - **COMPLETE** ✅*
