@@ -18,8 +18,10 @@ from training_engine import TrainingEngine
 from splits.split_strategies import DataSplitter
 from horizon_data_builder import HorizonDataBuilder
 from sweep_engine import SweepEngine
+
 sys.path.append(str(Path(__file__).parent.parent))
 from evaluation.metrics import format_metrics_table
+
 
 # Global state
 class AppState:
@@ -42,7 +44,48 @@ class AppState:
             self.full_data = self.data_prep.apply_pca_transforms(self.full_data)
             self.feature_cols = self.data_prep.get_feature_columns()
 
+
 state = AppState()
+
+
+# Hyperparameter save/load functions
+HYPERPARAM_DIR = Path(__file__).parent / "configs"
+BEST_HYPERPARAM_FILE = HYPERPARAM_DIR / "best_hyperparameters.json"
+
+
+def save_hyperparameters(params: dict, filename: str = None):
+    """Save hyperparameters to JSON file"""
+    if filename is None:
+        filename = BEST_HYPERPARAM_FILE
+    else:
+        filename = HYPERPARAM_DIR / filename
+
+    HYPERPARAM_DIR.mkdir(parents=True, exist_ok=True)
+
+    with open(filename, 'w') as f:
+        json.dump(params, f, indent=2)
+
+    return filename
+
+
+def load_hyperparameters(filename: str = None):
+    """Load hyperparameters from JSON file"""
+    if filename is None:
+        filename = BEST_HYPERPARAM_FILE
+    else:
+        filename = HYPERPARAM_DIR / filename
+
+    if not filename.exists():
+        return None
+
+    with open(filename, 'r') as f:
+        params = json.load(f)
+
+    # Remove metadata if present
+    if 'metadata' in params:
+        params = {k: v for k, v in params.items() if k != 'metadata'}
+
+    return params
 
 
 # Tab 1: Data & Features
@@ -55,32 +98,52 @@ def load_data_tab():
         ## Dataset Overview
 
         - **Total Samples**: {len(state.full_data):,}
-        - **Sequences**: {state.full_data['sequence_id'].nunique()}
-        - **Tracks**: {state.full_data['track_id'].nunique()}
-        - **Date Range**: {state.full_data['timestamp'].min()} to {state.full_data['timestamp'].max()}
+        - **Sequences**: {state.full_data["sequence_id"].nunique()}
+        - **Tracks**: {state.full_data["track_id"].nunique()}
+        - **Date Range**: {state.full_data["timestamp"].min()} to {state.full_data["timestamp"].max()}
 
         ## Available Features
 
-        - **Spatial (raw)**: {len(state.feature_cols['spatial_raw'])} features
-        - **Thermal (raw)**: {len(state.feature_cols['thermal_raw'])} features
-        - **Motion (raw)**: {len(state.feature_cols['motion_raw'])} features
-        - **Temporal (raw)**: {len(state.feature_cols['temporal_raw'])} features
-        - **Thermal PCA**: {len(state.feature_cols['thermal_pca'])} components
-        - **Spatial PCA**: {len(state.feature_cols['spatial_pca'])} components
+        - **Spatial (raw)**: {len(state.feature_cols["spatial_raw"])} features
+        - **Thermal (raw)**: {len(state.feature_cols["thermal_raw"])} features
+        - **Motion (raw)**: {len(state.feature_cols["motion_raw"])} features
+        - **Temporal (raw)**: {len(state.feature_cols["temporal_raw"])} features
+        - **Thermal PCA**: {len(state.feature_cols["thermal_pca"])} components
+        - **Spatial PCA**: {len(state.feature_cols["spatial_pca"])} components
 
         **Total Features**: {sum(len(v) for v in state.feature_cols.values())}
         """
 
         # Sample data preview
-        preview_df = state.full_data.head(5)[['timestamp', 'sequence_id', 'track_id', 'x_center', 'y_center', 'mean_color', 'speed']]
+        preview_df = state.full_data.head(5)[
+            [
+                "timestamp",
+                "sequence_id",
+                "track_id",
+                "x_center",
+                "y_center",
+                "mean_color",
+                "speed",
+            ]
+        ]
 
         # Get choices for the checkbox group
         choices = get_feature_choices()
 
-        return overview, preview_df, "✅ Data loaded successfully!", gr.update(choices=choices, value=[])
+        return (
+            overview,
+            preview_df,
+            "✅ Data loaded successfully!",
+            gr.update(choices=choices, value=[]),
+        )
 
     except Exception as e:
-        return f"Error loading data: {str(e)}", None, "❌ Failed to load data", gr.update()
+        return (
+            f"Error loading data: {str(e)}",
+            None,
+            "❌ Failed to load data",
+            gr.update(),
+        )
 
 
 def get_feature_choices():
@@ -92,7 +155,7 @@ def get_feature_choices():
 
     # Group features
     for group_name, features in state.feature_cols.items():
-        group_label = group_name.replace('_', ' ').title()
+        group_label = group_name.replace("_", " ").title()
         for feat in features:
             choices.append(f"[{group_label}] {feat}")
 
@@ -112,24 +175,30 @@ def create_data_tab():
 
         gr.Markdown("---")
         gr.Markdown("### Feature Selection")
-        gr.Markdown("Select features to use for training. Avoid mixing raw features with their corresponding PCA components.")
+        gr.Markdown(
+            "Select features to use for training. Avoid mixing raw features with their corresponding PCA components."
+        )
 
         feature_selector = gr.CheckboxGroup(
             label="Available Features",
             choices=[],  # Will be populated after loading
-            value=[]
+            value=[],
         )
 
         select_all_btn = gr.Button("Select All")
         clear_all_btn = gr.Button("Clear All")
-        smart_select_btn = gr.Button("Smart Select (PCA + Motion + Temporal)", variant="secondary")
+        smart_select_btn = gr.Button(
+            "Smart Select (PCA + Motion + Temporal)", variant="secondary"
+        )
 
-        selected_summary = gr.Textbox(label="Selected Features Summary", interactive=False)
+        selected_summary = gr.Textbox(
+            label="Selected Features Summary", interactive=False
+        )
 
         # Event handlers
         load_btn.click(
             fn=load_data_tab,
-            outputs=[overview_md, preview_table, status_text, feature_selector]
+            outputs=[overview_md, preview_table, status_text, feature_selector],
         )
 
         def smart_select():
@@ -138,13 +207,13 @@ def create_data_tab():
                 return []
 
             selected = []
-            for feat in state.feature_cols['thermal_pca']:
+            for feat in state.feature_cols["thermal_pca"]:
                 selected.append(f"[Thermal Pca] {feat}")
-            for feat in state.feature_cols['spatial_pca']:
+            for feat in state.feature_cols["spatial_pca"]:
                 selected.append(f"[Spatial Pca] {feat}")
-            for feat in state.feature_cols['motion_raw']:
+            for feat in state.feature_cols["motion_raw"]:
                 selected.append(f"[Motion Raw] {feat}")
-            for feat in state.feature_cols['temporal_raw']:
+            for feat in state.feature_cols["temporal_raw"]:
                 selected.append(f"[Temporal Raw] {feat}")
 
             return selected
@@ -156,10 +225,19 @@ def create_data_tab():
         def update_summary(selected):
             if not selected:
                 return "No features selected"
-            return f"Selected {len(selected)} features:\n" + "\n".join(f"  - {f}" for f in selected[:10]) + \
-                   (f"\n  ... and {len(selected)-10} more" if len(selected) > 10 else "")
+            return (
+                f"Selected {len(selected)} features:\n"
+                + "\n".join(f"  - {f}" for f in selected[:10])
+                + (
+                    f"\n  ... and {len(selected) - 10} more"
+                    if len(selected) > 10
+                    else ""
+                )
+            )
 
-        feature_selector.change(fn=update_summary, inputs=[feature_selector], outputs=[selected_summary])
+        feature_selector.change(
+            fn=update_summary, inputs=[feature_selector], outputs=[selected_summary]
+        )
 
         return feature_selector
 
@@ -174,28 +252,29 @@ def create_config_tab(feature_selector):
             models_selector = gr.CheckboxGroup(
                 label="Models to Train",
                 choices=["Random Forest", "XGBoost", "LightGBM"],
-                value=["Random Forest"]
+                value=["Random Forest"],
             )
 
             target_selector = gr.Radio(
                 label="Prediction Target",
                 choices=["Position (x, y)", "Size (area)", "Intensity (mean_color)"],
-                value="Position (x, y)"
+                value="Position (x, y)",
             )
 
         with gr.Row():
             horizons_selector = gr.CheckboxGroup(
                 label="Time Horizons",
-                choices=["t+1 (10 min)", "t+3 (30 min)", "t+6 (1 hour)", "t+12 (2 hours)"],
-                value=["t+1 (10 min)"]
+                choices=[
+                    "t+1 (10 min)",
+                    "t+3 (30 min)",
+                    "t+6 (1 hour)",
+                    "t+12 (2 hours)",
+                ],
+                value=["t+1 (10 min)"],
             )
 
             lookback_slider = gr.Slider(
-                label="Lookback Window (frames)",
-                minimum=3,
-                maximum=12,
-                value=6,
-                step=1
+                label="Lookback Window (frames)", minimum=3, maximum=12, value=6, step=1
             )
 
         gr.Markdown("### Train/Test Split")
@@ -204,19 +283,17 @@ def create_config_tab(feature_selector):
             split_strategy = gr.Dropdown(
                 label="Split Strategy",
                 choices=["Sequence-based Temporal", "Date-based", "Random"],
-                value="Sequence-based Temporal"
+                value="Sequence-based Temporal",
             )
 
             train_ratio_slider = gr.Slider(
-                label="Train Ratio",
-                minimum=0.6,
-                maximum=0.9,
-                value=0.8,
-                step=0.05
+                label="Train Ratio", minimum=0.6, maximum=0.9, value=0.8, step=0.05
             )
 
         preview_split_btn = gr.Button("Preview Split")
-        split_info_text = gr.Textbox(label="Split Information", interactive=False, lines=5)
+        split_info_text = gr.Textbox(
+            label="Split Information", interactive=False, lines=5
+        )
 
         def preview_split(strategy, ratio):
             """Preview train/test split"""
@@ -226,25 +303,31 @@ def create_config_tab(feature_selector):
 
                 # Perform split
                 if strategy == "Sequence-based Temporal":
-                    train_df, test_df = DataSplitter.sequence_based_temporal_split(state.full_data, ratio)
+                    train_df, test_df = DataSplitter.sequence_based_temporal_split(
+                        state.full_data, ratio
+                    )
                 elif strategy == "Date-based":
-                    train_df, test_df = DataSplitter.date_based_split(state.full_data, train_ratio=ratio)
+                    train_df, test_df = DataSplitter.date_based_split(
+                        state.full_data, train_ratio=ratio
+                    )
                 else:  # Random
-                    train_df, test_df = DataSplitter.random_split(state.full_data, ratio)
+                    train_df, test_df = DataSplitter.random_split(
+                        state.full_data, ratio
+                    )
 
                 # Get info
                 info = DataSplitter.get_split_info(train_df, test_df)
 
                 # Format output
                 output = f"""
-                Train samples: {info['train_samples']} ({info['train_ratio']:.1%})
-                Test samples: {info['test_samples']} ({1-info['train_ratio']:.1%})
+                Train samples: {info["train_samples"]} ({info["train_ratio"]:.1%})
+                Test samples: {info["test_samples"]} ({1 - info["train_ratio"]:.1%})
 
-                Train sequences: {info.get('train_sequences', 'N/A')}
-                Test sequences: {info.get('test_sequences', 'N/A')}
+                Train sequences: {info.get("train_sequences", "N/A")}
+                Test sequences: {info.get("test_sequences", "N/A")}
 
-                Train date range: {info.get('train_date_range', ('N/A', 'N/A'))[0]} to {info.get('train_date_range', ('N/A', 'N/A'))[1]}
-                Test date range: {info.get('test_date_range', ('N/A', 'N/A'))[0]} to {info.get('test_date_range', ('N/A', 'N/A'))[1]}
+                Train date range: {info.get("train_date_range", ("N/A", "N/A"))[0]} to {info.get("train_date_range", ("N/A", "N/A"))[1]}
+                Test date range: {info.get("test_date_range", ("N/A", "N/A"))[0]} to {info.get("test_date_range", ("N/A", "N/A"))[1]}
                 """
 
                 # Store split for training
@@ -259,30 +342,56 @@ def create_config_tab(feature_selector):
         preview_split_btn.click(
             fn=preview_split,
             inputs=[split_strategy, train_ratio_slider],
-            outputs=[split_info_text]
+            outputs=[split_info_text],
         )
 
-        return models_selector, target_selector, horizons_selector, lookback_slider, split_strategy, train_ratio_slider
+        return (
+            models_selector,
+            target_selector,
+            horizons_selector,
+            lookback_slider,
+            split_strategy,
+            train_ratio_slider,
+        )
 
 
 # Tab 3: Training
-def create_training_tab(feature_selector, models_selector, target_selector, horizons_selector):
+def create_training_tab(
+    feature_selector, models_selector, target_selector, horizons_selector
+):
     """Create Tab 3: Training"""
     with gr.Tab("3. Training"):
         gr.Markdown("## Train Models")
 
-        config_summary = gr.Textbox(label="Configuration Summary", lines=8, interactive=False)
+        config_summary = gr.Textbox(
+            label="Configuration Summary", lines=8, interactive=False
+        )
 
         with gr.Row():
-            tune_btn = gr.Button("🔧 Tune Hyperparameters", variant="secondary", size="lg")
+            tune_btn = gr.Button(
+                "🔧 Tune Hyperparameters", variant="secondary", size="lg"
+            )
+            load_hp_btn = gr.Button(
+                "📁 Load Best Hyperparameters", variant="secondary", size="lg"
+            )
             train_btn = gr.Button("▶️ Start Training", variant="primary", size="lg")
 
         with gr.Row():
             n_trials_slider = gr.Slider(
-                minimum=10, maximum=200, value=50, step=10,
+                minimum=10,
+                maximum=500,
+                value=50,
+                step=10,
                 label="Number of Tuning Trials (More trials = better optimization, but slower)",
-                info="Recommended: 50-100 trials. Current: 50"
+                info="Recommended: 50-100 trials. Current: 50",
             )
+
+        hyperparams_status = gr.Textbox(
+            label="Current Hyperparameters",
+            lines=3,
+            interactive=False,
+            value="No hyperparameters loaded. Using model defaults."
+        )
 
         tuning_log = gr.Textbox(label="Tuning Log", lines=10, interactive=False)
         training_log = gr.Textbox(label="Training Log", lines=15, interactive=False)
@@ -292,17 +401,27 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
             """Generate human-readable config summary"""
             return f"""
             Features: {len(features)} selected
-            Models: {', '.join(models)}
+            Models: {", ".join(models)}
             Target: {target}
-            Horizons: {', '.join(horizons)}
+            Horizons: {", ".join(horizons)}
             """
 
         # Update summary when inputs change
-        for inp in [feature_selector, models_selector, target_selector, horizons_selector]:
+        for inp in [
+            feature_selector,
+            models_selector,
+            target_selector,
+            horizons_selector,
+        ]:
             inp.change(
                 fn=generate_config_summary,
-                inputs=[feature_selector, models_selector, target_selector, horizons_selector],
-                outputs=[config_summary]
+                inputs=[
+                    feature_selector,
+                    models_selector,
+                    target_selector,
+                    horizons_selector,
+                ],
+                outputs=[config_summary],
             )
 
         def run_training(selected_features, selected_models, target, horizons):
@@ -311,12 +430,12 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                 if state.full_data is None:
                     return "Please load data first (Tab 1)", "❌ No data loaded"
 
-                log = "="*80 + "\n"
+                log = "=" * 80 + "\n"
                 log += "MULTI-HORIZON TRAINING\n"
-                log += "="*80 + "\n\n"
+                log += "=" * 80 + "\n\n"
 
                 # Extract feature names from selections
-                feature_names = [f.split('] ')[1] for f in selected_features]
+                feature_names = [f.split("] ")[1] for f in selected_features]
 
                 # Check features exist
                 available = set(state.full_data.columns)
@@ -328,17 +447,24 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                 if "Position" in target:
                     target_col = "x_center"  # Simplified: just x for now
                     # Check for target leakage
-                    if any('spatial' in f.lower() or 'x_center' in f or 'y_center' in f for f in feature_names):
+                    if any(
+                        "spatial" in f.lower() or "x_center" in f or "y_center" in f
+                        for f in feature_names
+                    ):
                         log += "⚠️ WARNING: Predicting position with spatial features (includes x_center, y_center)!\n"
                         log += "   This may cause target leakage. Consider using only motion + temporal features.\n\n"
                 elif "Size" in target:
                     target_col = "bbox_area"
-                    if 'bbox_area' in feature_names or any('spatial' in f.lower() for f in feature_names):
+                    if "bbox_area" in feature_names or any(
+                        "spatial" in f.lower() for f in feature_names
+                    ):
                         log += "⚠️ WARNING: Predicting size with spatial features (includes bbox_area)!\n"
                         log += "   This may cause target leakage.\n\n"
                 else:  # Intensity
                     target_col = "mean_color"
-                    if 'mean_color' in feature_names or any('thermal' in f.lower() for f in feature_names):
+                    if "mean_color" in feature_names or any(
+                        "thermal" in f.lower() for f in feature_names
+                    ):
                         log += "⚠️ WARNING: Predicting intensity with thermal features (includes mean_color)!\n"
                         log += "   This may cause target leakage.\n\n"
 
@@ -361,19 +487,24 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                         horizon_values.append(1)
 
                 if not horizon_values:
-                    return "Please select at least one time horizon (Tab 2)", "❌ No horizons selected"
+                    return (
+                        "Please select at least one time horizon (Tab 2)",
+                        "❌ No horizons selected",
+                    )
 
                 # Get train/test sequences (FIXED: ensure no overlap)
                 if state.train_df is None:
                     # Default sequence split if not previewed
-                    train_df, test_df = DataSplitter.sequence_based_temporal_split(state.full_data, 0.8)
+                    train_df, test_df = DataSplitter.sequence_based_temporal_split(
+                        state.full_data, 0.8
+                    )
                 else:
                     train_df = state.train_df
                     test_df = state.test_df
 
                 # Get unique sequences from each split
-                train_sequences_set = set(train_df['sequence_id'].unique())
-                test_sequences_set = set(test_df['sequence_id'].unique())
+                train_sequences_set = set(train_df["sequence_id"].unique())
+                test_sequences_set = set(test_df["sequence_id"].unique())
 
                 # Find overlap (sequences appearing in both)
                 overlap = train_sequences_set & test_sequences_set
@@ -392,30 +523,36 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
 
                 # Map model names
                 model_map = {"Random Forest": "random_forest"}
-                model_names = [model_map.get(m, m.lower().replace(' ', '_')) for m in selected_models]
+                model_names = [
+                    model_map.get(m, m.lower().replace(" ", "_"))
+                    for m in selected_models
+                ]
 
                 # Train for each horizon
                 all_results = {}
                 engine = TrainingEngine()
 
                 for horizon in horizon_values:
-                    log += "="*80 + "\n"
+                    log += "=" * 80 + "\n"
                     log += f"HORIZON t+{horizon} ({horizon * 10} minutes)\n"
-                    log += "="*80 + "\n\n"
+                    log += "=" * 80 + "\n\n"
 
                     try:
                         # Build horizon-specific dataset
-                        X, y, idx_curr, idx_fut, df_curr, df_fut = HorizonDataBuilder.build_horizon_dataset(
-                            state.full_data,
-                            feature_cols=feature_names,
-                            target_col=target_col,
-                            horizon=horizon
+                        X, y, idx_curr, idx_fut, df_curr, df_fut = (
+                            HorizonDataBuilder.build_horizon_dataset(
+                                state.full_data,
+                                feature_cols=feature_names,
+                                target_col=target_col,
+                                horizon=horizon,
+                            )
                         )
 
                         # Split into train/test
-                        X_train, y_train, X_test, y_test = HorizonDataBuilder.split_by_sequences(
-                            df_curr, df_fut, X, y,
-                            train_sequences, test_sequences
+                        X_train, y_train, X_test, y_test = (
+                            HorizonDataBuilder.split_by_sequences(
+                                df_curr, df_fut, X, y, train_sequences, test_sequences
+                            )
                         )
 
                         log += f"\nDataset built:\n"
@@ -432,13 +569,16 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                             log += "  " + msg + "\n"
 
                         horizon_results = engine.train_all_models(
-                            X_train, y_train, X_test, y_test,
+                            X_train,
+                            y_train,
+                            X_test,
+                            y_test,
                             feature_names=feature_names,
                             model_names=model_names,
                             target_name=target_col,
                             progress_callback=progress_callback,
                             enable_ensemble=True,
-                            model_params_dict=state.tuned_params
+                            model_params_dict=state.tuned_params,
                         )
 
                         # Store results with horizon keys
@@ -453,26 +593,35 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                 # Store results
                 state.results = all_results
 
-                log += "\n" + "="*80 + "\n"
+                log += "\n" + "=" * 80 + "\n"
                 log += "ALL TRAINING COMPLETE\n"
-                log += "="*80 + "\n\n"
+                log += "=" * 80 + "\n\n"
 
                 # Format metrics table
                 metrics_dict = {}
                 for key, res in all_results.items():
-                    if 'metrics' in res:
-                        metrics_dict[key] = res['metrics']
+                    if "metrics" in res:
+                        metrics_dict[key] = res["metrics"]
 
                 if metrics_dict:
                     log += format_metrics_table(metrics_dict)
 
-                return log, f"✅ Trained {len(all_results)} models across {len(horizon_values)} horizons!"
+                return (
+                    log,
+                    f"✅ Trained {len(all_results)} models across {len(horizon_values)} horizons!",
+                )
 
             except Exception as e:
                 import traceback
-                return f"Error during training:\n{str(e)}\n\n{traceback.format_exc()}", f"❌ Error: {str(e)}"
 
-        def run_hyperparameter_tuning(selected_features, selected_models, target, horizons, n_trials):
+                return (
+                    f"Error during training:\n{str(e)}\n\n{traceback.format_exc()}",
+                    f"❌ Error: {str(e)}",
+                )
+
+        def run_hyperparameter_tuning(
+            selected_features, selected_models, target, horizons, n_trials
+        ):
             """Run hyperparameter tuning before training"""
             try:
                 if state.full_data is None:
@@ -483,7 +632,7 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                 from horizon_data_builder import HorizonDataBuilder
 
                 # Extract feature names
-                feature_names = [f.split('] ')[1] for f in selected_features]
+                feature_names = [f.split("] ")[1] for f in selected_features]
 
                 # Determine target column
                 if "Position" in target:
@@ -516,24 +665,31 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                 log += f"Trials per model: {n_trials}\n\n"
 
                 # Build horizon dataset
-                X, y, idx_curr, idx_fut, df_curr, df_fut = HorizonDataBuilder.build_horizon_dataset(
-                    state.full_data,
-                    feature_cols=feature_names,
-                    target_col=target_col,
-                    horizon=horizon
+                X, y, idx_curr, idx_fut, df_curr, df_fut = (
+                    HorizonDataBuilder.build_horizon_dataset(
+                        state.full_data,
+                        feature_cols=feature_names,
+                        target_col=target_col,
+                        horizon=horizon,
+                    )
                 )
 
                 # 3-way split: train/val/test
-                train_df, val_df, test_df = three_way_sequence_split(df_curr, train_ratio=0.6, val_ratio=0.2, test_ratio=0.2)
+                train_df, val_df, test_df = three_way_sequence_split(
+                    df_curr, train_ratio=0.6, val_ratio=0.2, test_ratio=0.2
+                )
 
                 # Get train/val sequences
-                train_sequences = train_df['sequence_id'].unique().tolist()
-                val_sequences = val_df['sequence_id'].unique().tolist()
+                train_sequences = train_df["sequence_id"].unique().tolist()
+                val_sequences = val_df["sequence_id"].unique().tolist()
 
                 # Split horizon data by sequences
                 from horizon_data_builder import HorizonDataBuilder
-                X_train_temp, y_train_temp, X_val_temp, y_val_temp = HorizonDataBuilder.split_by_sequences(
-                    df_curr, df_fut, X, y, train_sequences, val_sequences
+
+                X_train_temp, y_train_temp, X_val_temp, y_val_temp = (
+                    HorizonDataBuilder.split_by_sequences(
+                        df_curr, df_fut, X, y, train_sequences, val_sequences
+                    )
                 )
 
                 X_train, y_train = X_train_temp, y_train_temp
@@ -545,8 +701,15 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                 log += f"  Test:  {len(X) - len(X_train) - len(X_val)} samples\n\n"
 
                 # Map model names
-                model_map = {"Random Forest": "random_forest", "XGBoost": "xgboost", "LightGBM": "lightgbm"}
-                model_names = [model_map.get(m, m.lower().replace(' ', '_')) for m in selected_models]
+                model_map = {
+                    "Random Forest": "random_forest",
+                    "XGBoost": "xgboost",
+                    "LightGBM": "lightgbm",
+                }
+                model_names = [
+                    model_map.get(m, m.lower().replace(" ", "_"))
+                    for m in selected_models
+                ]
 
                 # Tune each model
                 tuned_params = {}
@@ -562,39 +725,126 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                         if trial_num % 10 == 0 or trial_num == 1:
                             log += f"  Trial {trial_num}: Best R² = {best_r2:.4f}\n"
 
-                    result = tuner.tune(X_train, y_train, X_val, y_val, n_trials=n_trials, progress_callback=progress_callback)
+                    result = tuner.tune(
+                        X_train,
+                        y_train,
+                        X_val,
+                        y_val,
+                        n_trials=n_trials,
+                        progress_callback=progress_callback,
+                    )
 
-                    tuned_params[model_name] = result['best_params']
+                    tuned_params[model_name] = result["best_params"]
 
                     log += f"\n✅ Best params for {model_name}:\n"
-                    for param, value in result['best_params'].items():
+                    for param, value in result["best_params"].items():
                         log += f"    {param}: {value}\n"
                     log += f"  Validation R²: {result['best_r2']:.4f}\n\n"
 
                 # Store tuned params in state
                 state.tuned_params = tuned_params
 
+                # Auto-save tuned hyperparameters
+                try:
+                    import datetime
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+                    # Save with timestamp
+                    timestamped_file = f"tuned_params_{timestamp}.json"
+                    saved_path = save_hyperparameters(tuned_params, timestamped_file)
+
+                    # Also save as best_hyperparameters.json (default)
+                    save_hyperparameters(tuned_params)
+
+                    log += f"\n💾 Saved hyperparameters to:\n"
+                    log += f"   - configs/best_hyperparameters.json (default)\n"
+                    log += f"   - configs/{timestamped_file} (backup)\n\n"
+                except Exception as e:
+                    log += f"\n⚠️  Failed to save hyperparameters: {str(e)}\n\n"
+
                 log += "=" * 80 + "\n"
                 log += "TUNING COMPLETE\n"
                 log += "=" * 80 + "\n"
                 log += "Use 'Start Training' to train with optimized hyperparameters.\n"
 
-                return log, f"✅ Tuned {len(tuned_params)} models! Ready to train."
+                # Create hyperparams status message
+                hp_status = "✅ Hyperparameters just tuned and saved\n\n"
+                for model_name, model_params in tuned_params.items():
+                    hp_status += f"{model_name}:\n"
+                    for param_name, param_value in model_params.items():
+                        if isinstance(param_value, float):
+                            hp_status += f"  {param_name}: {param_value:.4f}\n"
+                        else:
+                            hp_status += f"  {param_name}: {param_value}\n"
+                    hp_status += "\n"
+
+                return log, f"✅ Tuned {len(tuned_params)} models! Saved to configs/", hp_status
 
             except Exception as e:
                 import traceback
-                return f"Error during tuning:\n{str(e)}\n\n{traceback.format_exc()}", f"❌ Tuning failed: {str(e)}"
+
+                return (
+                    f"Error during tuning:\n{str(e)}\n\n{traceback.format_exc()}",
+                    f"❌ Tuning failed: {str(e)}",
+                    "No hyperparameters loaded. Using model defaults."
+                )
+
+        def load_best_hyperparameters():
+            """Load saved hyperparameters from file"""
+            try:
+                params = load_hyperparameters()
+
+                if params is None:
+                    return "❌ No saved hyperparameters found. Run tuning first or check configs/best_hyperparameters.json"
+
+                # Store in state
+                state.tuned_params = params
+
+                # Format status message
+                status_msg = "✅ Loaded hyperparameters from configs/best_hyperparameters.json\n\n"
+                for model_name, model_params in params.items():
+                    status_msg += f"{model_name}:\n"
+                    for param_name, param_value in model_params.items():
+                        if isinstance(param_value, float):
+                            status_msg += f"  {param_name}: {param_value:.4f}\n"
+                        else:
+                            status_msg += f"  {param_name}: {param_value}\n"
+                    status_msg += "\n"
+
+                status_msg += "These parameters will be used for training."
+
+                return status_msg
+
+            except Exception as e:
+                return f"❌ Error loading hyperparameters: {str(e)}"
 
         tune_btn.click(
             fn=run_hyperparameter_tuning,
-            inputs=[feature_selector, models_selector, target_selector, horizons_selector, n_trials_slider],
-            outputs=[tuning_log, training_status]
+            inputs=[
+                feature_selector,
+                models_selector,
+                target_selector,
+                horizons_selector,
+                n_trials_slider,
+            ],
+            outputs=[tuning_log, training_status, hyperparams_status],
         )
 
         train_btn.click(
             fn=run_training,
-            inputs=[feature_selector, models_selector, target_selector, horizons_selector],
-            outputs=[training_log, training_status]
+            inputs=[
+                feature_selector,
+                models_selector,
+                target_selector,
+                horizons_selector,
+            ],
+            outputs=[training_log, training_status],
+        )
+
+        load_hp_btn.click(
+            fn=load_best_hyperparameters,
+            inputs=[],
+            outputs=[hyperparams_status],
         )
 
 
@@ -616,25 +866,27 @@ def create_results_tab():
             # Convert to dataframe
             rows = []
             for model_name, result in state.results.items():
-                if 'metrics' in result:
-                    metrics = result['metrics']
-                    rows.append({
-                        'Model': model_name,
-                        'Train RMSE': f"{metrics['train_rmse']:.4f}",
-                        'Test RMSE': f"{metrics['test_rmse']:.4f}",
-                        'Train MAE': f"{metrics['train_mae']:.4f}",
-                        'Test MAE': f"{metrics['test_mae']:.4f}",
-                        'Train R²': f"{metrics['train_r2']:.4f}",
-                        'Test R²': f"{metrics['test_r2']:.4f}",
-                        'Train Time (s)': f"{metrics['train_time']:.2f}"
-                    })
+                if "metrics" in result:
+                    metrics = result["metrics"]
+                    rows.append(
+                        {
+                            "Model": model_name,
+                            "Train RMSE": f"{metrics['train_rmse']:.4f}",
+                            "Test RMSE": f"{metrics['test_rmse']:.4f}",
+                            "Train MAE": f"{metrics['train_mae']:.4f}",
+                            "Test MAE": f"{metrics['test_mae']:.4f}",
+                            "Train R²": f"{metrics['train_r2']:.4f}",
+                            "Test R²": f"{metrics['test_r2']:.4f}",
+                            "Train Time (s)": f"{metrics['train_time']:.2f}",
+                        }
+                    )
 
             df = pd.DataFrame(rows) if rows else None
 
             # Summary
             summary = f"Trained {len(state.results)} model(s)\n\n"
             if df is not None:
-                best_model = df.loc[df['Test R²'].astype(float).idxmax()]
+                best_model = df.loc[df["Test R²"].astype(float).idxmax()]
                 summary += f"Best model (by Test R²): {best_model['Model']}\n"
                 summary += f"  Test RMSE: {best_model['Test RMSE']}\n"
                 summary += f"  Test R²: {best_model['Test R²']}"
@@ -649,7 +901,9 @@ def create_sweep_tab():
     """Create Tab 5: AutoML Parameter Sweep"""
     with gr.Tab("5. Parameter Sweep"):
         gr.Markdown("## 🔍 Automated Hyperparameter Search")
-        gr.Markdown("Randomized search over split strategies, features, targets, and horizons to find optimal configurations.")
+        gr.Markdown(
+            "Randomized search over split strategies, features, targets, and horizons to find optimal configurations."
+        )
 
         with gr.Row():
             with gr.Column(scale=1):
@@ -661,14 +915,14 @@ def create_sweep_tab():
                     value=50,
                     step=10,
                     label="Number of Iterations",
-                    info="How many random configurations to try"
+                    info="How many random configurations to try",
                 )
 
                 sweep_split_strategies = gr.CheckboxGroup(
                     choices=["sequence", "date", "random"],
                     value=["sequence"],
                     label="Split Strategies to Try",
-                    info="Which train/test split methods to test"
+                    info="Which train/test split methods to test",
                 )
 
                 sweep_train_ratio = gr.Slider(
@@ -677,35 +931,41 @@ def create_sweep_tab():
                     value=0.8,
                     step=0.05,
                     label="Train Ratio Range (will randomize ±10%)",
-                    info="Base train/test ratio"
+                    info="Base train/test ratio",
                 )
 
                 sweep_feature_strategies = gr.CheckboxGroup(
-                    choices=["pca_only", "raw_only", "motion_temporal_only", "random_subset", "all_features"],
+                    choices=[
+                        "pca_only",
+                        "raw_only",
+                        "motion_temporal_only",
+                        "random_subset",
+                        "all_features",
+                    ],
                     value=["pca_only", "raw_only", "motion_temporal_only"],
                     label="Feature Strategies",
-                    info="Which feature selection strategies to test"
+                    info="Which feature selection strategies to test",
                 )
 
                 sweep_targets = gr.CheckboxGroup(
                     choices=["x_center", "y_center", "bbox_area", "mean_color"],
                     value=["x_center", "y_center"],
                     label="Prediction Targets",
-                    info="Which variables to predict"
+                    info="Which variables to predict",
                 )
 
                 sweep_horizons = gr.CheckboxGroup(
                     choices=[1, 3, 6, 12],
                     value=[1, 3, 6],
                     label="Time Horizons",
-                    info="Which forecasting horizons to test"
+                    info="Which forecasting horizons to test",
                 )
 
                 sweep_models = gr.CheckboxGroup(
                     choices=["random_forest", "xgboost", "lightgbm"],
                     value=["random_forest", "xgboost"],
                     label="Models to Try",
-                    info="Which model types to test"
+                    info="Which model types to test",
                 )
 
                 with gr.Row():
@@ -714,10 +974,7 @@ def create_sweep_tab():
                     export_sweep_btn = gr.Button("💾 Export Results")
 
                 export_status = gr.Textbox(
-                    label="Export Status",
-                    value="",
-                    interactive=False,
-                    lines=2
+                    label="Export Status", value="", interactive=False, lines=2
                 )
 
             with gr.Column(scale=2):
@@ -727,28 +984,25 @@ def create_sweep_tab():
                     label="Status",
                     value="Ready to start sweep",
                     interactive=False,
-                    lines=1
+                    lines=1,
                 )
 
                 sweep_progress = gr.Textbox(
-                    label="Progress Log",
-                    interactive=False,
-                    lines=20,
-                    value=""
+                    label="Progress Log", interactive=False, lines=20, value=""
                 )
 
                 gr.Markdown("### Top 10 Configurations")
                 leaderboard_table = gr.DataFrame(
-                    label="Leaderboard (sorted by Test R²)",
-                    interactive=False
+                    label="Leaderboard (sorted by Test R²)", interactive=False
                 )
 
                 best_config_display = gr.JSON(
-                    label="Best Configuration Details",
-                    value={}
+                    label="Best Configuration Details", value={}
                 )
 
-        def run_sweep(n_iter, split_strats, train_ratio, feat_strats, targets, horizons, models):
+        def run_sweep(
+            n_iter, split_strats, train_ratio, feat_strats, targets, horizons, models
+        ):
             """Execute parameter sweep"""
             try:
                 if state.full_data is None:
@@ -756,28 +1010,35 @@ def create_sweep_tab():
 
                 state.sweep_running = True
 
-                log = "="*80 + "\n"
+                log = "=" * 80 + "\n"
                 log += "PARAMETER SWEEP STARTED\n"
-                log += "="*80 + "\n\n"
+                log += "=" * 80 + "\n\n"
 
                 # Build config space
                 config_space = {
-                    'split_strategy': split_strats if split_strats else ['sequence'],
-                    'train_ratio': [max(0.6, train_ratio - 0.1), min(0.9, train_ratio + 0.1)],
-                    'features': {
-                        'strategies': feat_strats if feat_strats else ['all_features'],
-                        'min_features': 5,
-                        'max_features': sum(len(v) for v in state.feature_cols.values())
+                    "split_strategy": split_strats if split_strats else ["sequence"],
+                    "train_ratio": [
+                        max(0.6, train_ratio - 0.1),
+                        min(0.9, train_ratio + 0.1),
+                    ],
+                    "features": {
+                        "strategies": feat_strats if feat_strats else ["all_features"],
+                        "min_features": 5,
+                        "max_features": sum(
+                            len(v) for v in state.feature_cols.values()
+                        ),
                     },
-                    'target': targets if targets else ['x_center'],
-                    'horizon': horizons if horizons else [1, 3],
-                    'model': models if models else ['random_forest']
+                    "target": targets if targets else ["x_center"],
+                    "horizon": horizons if horizons else [1, 3],
+                    "model": models if models else ["random_forest"],
                 }
 
                 log += f"Config space:\n"
                 log += f"  Split strategies: {config_space['split_strategy']}\n"
                 log += f"  Train ratio range: {config_space['train_ratio']}\n"
-                log += f"  Feature strategies: {config_space['features']['strategies']}\n"
+                log += (
+                    f"  Feature strategies: {config_space['features']['strategies']}\n"
+                )
                 log += f"  Targets: {config_space['target']}\n"
                 log += f"  Horizons: {config_space['horizon']}\n"
                 log += f"  Models: {config_space['model']}\n\n"
@@ -792,29 +1053,31 @@ def create_sweep_tab():
                     iteration_count[0] = i + 1
                     nonlocal log
 
-                    test_r2 = result.get('test_r2', np.nan)
-                    error = result.get('error', None)
+                    test_r2 = result.get("test_r2", np.nan)
+                    error = result.get("error", None)
 
                     if error:
-                        log += f"[{i+1}/{n_iter}] ✗ Error: {error}\n"
+                        log += f"[{i + 1}/{n_iter}] ✗ Error: {error}\n"
                     else:
-                        log += f"[{i+1}/{n_iter}] Test R²={test_r2:.4f} (Best: {best_r2:.4f}) | "
-                        log += f"Model={result['model']}, Horizon=t+{result['horizon']}, "
+                        log += f"[{i + 1}/{n_iter}] Test R²={test_r2:.4f} (Best: {best_r2:.4f}) | "
+                        log += (
+                            f"Model={result['model']}, Horizon=t+{result['horizon']}, "
+                        )
                         log += f"Features={result['n_features']}, Target={result['target']}\n"
 
                 # Run sweep
                 results_df = engine.run_sweep(
                     config_space,
                     n_iterations=int(n_iter),
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
                 )
 
                 state.sweep_results = results_df
                 state.sweep_running = False
 
-                log += "\n" + "="*80 + "\n"
+                log += "\n" + "=" * 80 + "\n"
                 log += "SWEEP COMPLETE\n"
-                log += "="*80 + "\n"
+                log += "=" * 80 + "\n"
                 log += f"Total iterations: {len(results_df)}\n"
                 log += f"Best Test R²: {engine.best_r2:.4f}\n\n"
 
@@ -822,22 +1085,37 @@ def create_sweep_tab():
                 leaderboard = engine.get_leaderboard(top_k=10)
 
                 # Format for display
-                display_cols = ['iteration', 'model', 'horizon', 'target', 'n_features',
-                               'test_r2', 'test_rmse', 'train_r2', 'split_strategy']
+                display_cols = [
+                    "iteration",
+                    "model",
+                    "horizon",
+                    "target",
+                    "n_features",
+                    "test_r2",
+                    "test_rmse",
+                    "train_r2",
+                    "split_strategy",
+                ]
                 leaderboard_display = leaderboard[display_cols].copy()
-                leaderboard_display['test_r2'] = leaderboard_display['test_r2'].apply(lambda x: f"{x:.4f}" if not np.isnan(x) else "NaN")
-                leaderboard_display['test_rmse'] = leaderboard_display['test_rmse'].apply(lambda x: f"{x:.4f}" if not np.isnan(x) else "NaN")
-                leaderboard_display['train_r2'] = leaderboard_display['train_r2'].apply(lambda x: f"{x:.4f}" if not np.isnan(x) else "NaN")
+                leaderboard_display["test_r2"] = leaderboard_display["test_r2"].apply(
+                    lambda x: f"{x:.4f}" if not np.isnan(x) else "NaN"
+                )
+                leaderboard_display["test_rmse"] = leaderboard_display[
+                    "test_rmse"
+                ].apply(lambda x: f"{x:.4f}" if not np.isnan(x) else "NaN")
+                leaderboard_display["train_r2"] = leaderboard_display["train_r2"].apply(
+                    lambda x: f"{x:.4f}" if not np.isnan(x) else "NaN"
+                )
 
                 # Best config
                 best_config_json = {
-                    'model': engine.best_config.get('model', 'N/A'),
-                    'horizon': engine.best_config.get('horizon', 'N/A'),
-                    'target': engine.best_config.get('target', 'N/A'),
-                    'split_strategy': engine.best_config.get('split_strategy', 'N/A'),
-                    'train_ratio': f"{engine.best_config.get('train_ratio', 0):.2f}",
-                    'n_features': len(engine.best_config.get('features', [])),
-                    'test_r2': f"{engine.best_r2:.4f}"
+                    "model": engine.best_config.get("model", "N/A"),
+                    "horizon": engine.best_config.get("horizon", "N/A"),
+                    "target": engine.best_config.get("target", "N/A"),
+                    "split_strategy": engine.best_config.get("split_strategy", "N/A"),
+                    "train_ratio": f"{engine.best_config.get('train_ratio', 0):.2f}",
+                    "n_features": len(engine.best_config.get("features", [])),
+                    "test_r2": f"{engine.best_r2:.4f}",
                 }
 
                 status = f"✅ Sweep complete: {len(results_df)} iterations | Best R² = {engine.best_r2:.4f}"
@@ -846,6 +1124,7 @@ def create_sweep_tab():
 
             except Exception as e:
                 import traceback
+
                 state.sweep_running = False
                 error_msg = f"Error during sweep:\n{str(e)}\n\n{traceback.format_exc()}"
                 return f"❌ Error: {str(e)}", error_msg, None, {}
@@ -858,34 +1137,58 @@ def create_sweep_tab():
             try:
                 output_path = Path(__file__).parent / "sweep_results.csv"
                 state.sweep_results.to_csv(output_path, index=False)
-                return f"✅ Exported {len(state.sweep_results)} results to {output_path}"
+                return (
+                    f"✅ Exported {len(state.sweep_results)} results to {output_path}"
+                )
             except Exception as e:
                 return f"❌ Export failed: {str(e)}"
 
         start_sweep_btn.click(
             fn=run_sweep,
-            inputs=[n_iterations, sweep_split_strategies, sweep_train_ratio,
-                   sweep_feature_strategies, sweep_targets, sweep_horizons, sweep_models],
-            outputs=[sweep_status, sweep_progress, leaderboard_table, best_config_display]
+            inputs=[
+                n_iterations,
+                sweep_split_strategies,
+                sweep_train_ratio,
+                sweep_feature_strategies,
+                sweep_targets,
+                sweep_horizons,
+                sweep_models,
+            ],
+            outputs=[
+                sweep_status,
+                sweep_progress,
+                leaderboard_table,
+                best_config_display,
+            ],
         )
 
-        export_sweep_btn.click(
-            fn=export_sweep_results,
-            outputs=[export_status]
-        )
+        export_sweep_btn.click(fn=export_sweep_results, outputs=[export_status])
 
 
 # Main App
 def create_app():
     """Create the main Gradio app"""
-    with gr.Blocks(title="Hurricane Forecasting Training GUI", theme=gr.themes.Soft()) as app:
+    with gr.Blocks(
+        title="Hurricane Forecasting Training GUI", theme=gr.themes.Soft()
+    ) as app:
         gr.Markdown("# 🌀 Hurricane Storm Forecasting - Training Interface")
-        gr.Markdown("Multi-horizon storm prediction using tree-based models on satellite thermal imagery")
+        gr.Markdown(
+            "Multi-horizon storm prediction using tree-based models on satellite thermal imagery"
+        )
 
         # Create all tabs
         feature_selector = create_data_tab()
-        models_selector, target_selector, horizons_selector, lookback_slider, split_strategy, train_ratio_slider = create_config_tab(feature_selector)
-        create_training_tab(feature_selector, models_selector, target_selector, horizons_selector)
+        (
+            models_selector,
+            target_selector,
+            horizons_selector,
+            lookback_slider,
+            split_strategy,
+            train_ratio_slider,
+        ) = create_config_tab(feature_selector)
+        create_training_tab(
+            feature_selector, models_selector, target_selector, horizons_selector
+        )
         create_results_tab()
         create_sweep_tab()
 

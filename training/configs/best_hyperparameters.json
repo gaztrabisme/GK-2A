@@ -1,0 +1,36 @@
+{
+  "metadata": {
+    "date": "2025-11-19",
+    "trials": 200,
+    "validation_strategy": "3/3/2 sequence split",
+    "ensemble_r2_t1": 0.7809,
+    "ensemble_r2_t3": 0.7109,
+    "ensemble_r2_t6": 0.6893
+  },
+  "random_forest": {
+    "n_estimators": 156,
+    "max_depth": 30,
+    "min_samples_split": 20,
+    "min_samples_leaf": 2,
+    "max_features": 0.7
+  },
+  "xgboost": {
+    "n_estimators": 326,
+    "max_depth": 10,
+    "learning_rate": 0.08793670374385773,
+    "subsample": 0.7032615070369239,
+    "colsample_bytree": 0.6848754268144354,
+    "reg_alpha": 0.0003771773445226092,
+    "reg_lambda": 8.875525486162674
+  },
+  "lightgbm": {
+    "n_estimators": 427,
+    "num_leaves": 68,
+    "learning_rate": 0.13378069301236917,
+    "feature_fraction": 0.7713316086699948,
+    "bagging_fraction": 0.6981995719046562,
+    "min_child_samples": 47,
+    "reg_alpha": 0.00039159692418926323,
+    "reg_lambda": 9.721808710955484
+  }
+}
