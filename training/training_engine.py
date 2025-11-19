@@ -82,7 +82,8 @@ class TrainingEngine:
         model_names: List[str],
         target_name: str = "target",
         progress_callback: Optional[Callable] = None,
-        enable_ensemble: bool = True
+        enable_ensemble: bool = True,
+        model_params_dict: Optional[Dict[str, Dict]] = None
     ) -> Dict:
         """
         Train multiple models and compare results.
@@ -95,6 +96,8 @@ class TrainingEngine:
             target_name: Name of target variable (for saving)
             progress_callback: Optional function(message) to report progress
             enable_ensemble: If True, create voting ensemble from trained models
+            model_params_dict: Optional dict mapping model names to hyperparameters
+                              e.g., {'lightgbm': {'n_estimators': 300, 'num_leaves': 50}}
 
         Returns:
             Dictionary mapping model names to results (includes 'ensemble' if enabled)
@@ -107,8 +110,15 @@ class TrainingEngine:
                 progress_callback(f"Training {model_name} ({i+1}/{len(model_names)})...")
 
             try:
+                # Get hyperparameters for this model if available
+                model_params = model_params_dict.get(model_name) if model_params_dict else None
+
+                if model_params:
+                    progress_callback(f"  Using tuned hyperparameters for {model_name}")
+
                 result = self.train_single_model(
-                    model_name, X_train, y_train, X_test, y_test, feature_names
+                    model_name, X_train, y_train, X_test, y_test, feature_names,
+                    model_params=model_params
                 )
                 results[model_name] = result
                 trained_models[model_name] = result['model']

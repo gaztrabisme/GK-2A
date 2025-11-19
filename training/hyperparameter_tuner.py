@@ -108,7 +108,7 @@ class HyperparameterTuner:
                     )
                 elif param_config['type'] == 'categorical':
                     params[param_name] = trial.suggest_categorical(
-                        param_config, param_config['choices']
+                        param_name, param_config['choices']
                     )
 
             # Train model with these hyperparameters

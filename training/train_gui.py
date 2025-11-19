@@ -32,6 +32,7 @@ class AppState:
         self.results = None
         self.sweep_results = None
         self.sweep_running = False
+        self.tuned_params = None  # Store hyperparameter tuning results
 
     def initialize(self):
         """Load and prepare data"""
@@ -271,7 +272,12 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
         gr.Markdown("## Train Models")
 
         config_summary = gr.Textbox(label="Configuration Summary", lines=8, interactive=False)
-        train_btn = gr.Button("Start Training", variant="primary", size="lg")
+
+        with gr.Row():
+            tune_btn = gr.Button("🔧 Tune Hyperparameters", variant="secondary", size="lg")
+            train_btn = gr.Button("▶️ Start Training", variant="primary", size="lg")
+
+        tuning_log = gr.Textbox(label="Tuning Log", lines=10, interactive=False)
         training_log = gr.Textbox(label="Training Log", lines=15, interactive=False)
         training_status = gr.Textbox(label="Status", interactive=False)
 
@@ -409,6 +415,10 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                         log += f"  Train: {X_train.shape[0]} samples\n"
                         log += f"  Test: {X_test.shape[0]} samples\n\n"
 
+                        # Check if we have tuned hyperparameters
+                        if state.tuned_params:
+                            log += "Using tuned hyperparameters from previous tuning session\n\n"
+
                         # Train all models for this horizon (includes ensemble)
                         def progress_callback(msg):
                             nonlocal log
@@ -420,7 +430,8 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                             model_names=model_names,
                             target_name=target_col,
                             progress_callback=progress_callback,
-                            enable_ensemble=True
+                            enable_ensemble=True,
+                            model_params_dict=state.tuned_params
                         )
 
                         # Store results with horizon keys
@@ -453,6 +464,124 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
             except Exception as e:
                 import traceback
                 return f"Error during training:\n{str(e)}\n\n{traceback.format_exc()}", f"❌ Error: {str(e)}"
+
+        def run_hyperparameter_tuning(selected_features, selected_models, target, horizons):
+            """Run hyperparameter tuning before training"""
+            try:
+                if state.full_data is None:
+                    return "", "Please load data first (Tab 1)", "❌ No data loaded"
+
+                from hyperparameter_tuner import HyperparameterTuner
+                from splits.three_way_split import three_way_sequence_split
+                from horizon_data_builder import HorizonDataBuilder
+
+                # Extract feature names
+                feature_names = [f.split('] ')[1] for f in selected_features]
+
+                # Determine target column
+                if "Position" in target:
+                    target_col = "x_center"
+                elif "Size" in target:
+                    target_col = "bbox_area"
+                else:
+                    target_col = "mean_color"
+
+                # Parse horizons (use first horizon for tuning)
+                horizon = 1  # Default to t+1
+                for h in horizons:
+                    if "t+12" in h:
+                        horizon = 12
+                    elif "t+6" in h:
+                        horizon = 6
+                    elif "t+3" in h:
+                        horizon = 3
+                    elif "t+1" in h:
+                        horizon = 1
+                        break
+
+                log = "=" * 80 + "\n"
+                log += "HYPERPARAMETER TUNING\n"
+                log += "=" * 80 + "\n\n"
+                log += f"Features: {len(feature_names)}\n"
+                log += f"Target: {target_col}\n"
+                log += f"Horizon: t+{horizon}\n"
+                log += f"Models: {', '.join(selected_models)}\n\n"
+
+                # Build horizon dataset
+                X, y, idx_curr, idx_fut, df_curr, df_fut = HorizonDataBuilder.build_horizon_dataset(
+                    state.full_data,
+                    feature_cols=feature_names,
+                    target_col=target_col,
+                    horizon=horizon
+                )
+
+                # 3-way split: train/val/test
+                train_df, val_df, test_df = three_way_sequence_split(df_curr, train_ratio=0.6, val_ratio=0.2, test_ratio=0.2)
+
+                # Get train/val sequences
+                train_sequences = train_df['sequence_id'].unique().tolist()
+                val_sequences = val_df['sequence_id'].unique().tolist()
+
+                # Split horizon data by sequences
+                from horizon_data_builder import HorizonDataBuilder
+                X_train_temp, y_train_temp, X_val_temp, y_val_temp = HorizonDataBuilder.split_by_sequences(
+                    df_curr, df_fut, X, y, train_sequences, val_sequences
+                )
+
+                X_train, y_train = X_train_temp, y_train_temp
+                X_val, y_val = X_val_temp, y_val_temp
+
+                log += f"\nData split:\n"
+                log += f"  Train: {len(X_train)} samples\n"
+                log += f"  Val:   {len(X_val)} samples\n"
+                log += f"  Test:  {len(X) - len(X_train) - len(X_val)} samples\n\n"
+
+                # Map model names
+                model_map = {"Random Forest": "random_forest", "XGBoost": "xgboost", "LightGBM": "lightgbm"}
+                model_names = [model_map.get(m, m.lower().replace(' ', '_')) for m in selected_models]
+
+                # Tune each model
+                tuned_params = {}
+                for model_name in model_names:
+                    log += "=" * 80 + "\n"
+                    log += f"Tuning {model_name}...\n"
+                    log += "=" * 80 + "\n\n"
+
+                    tuner = HyperparameterTuner(model_name)
+
+                    def progress_callback(trial_num, best_r2, params):
+                        nonlocal log
+                        if trial_num % 10 == 0 or trial_num == 1:
+                            log += f"  Trial {trial_num}: Best R² = {best_r2:.4f}\n"
+
+                    result = tuner.tune(X_train, y_train, X_val, y_val, n_trials=30, progress_callback=progress_callback)
+
+                    tuned_params[model_name] = result['best_params']
+
+                    log += f"\n✅ Best params for {model_name}:\n"
+                    for param, value in result['best_params'].items():
+                        log += f"    {param}: {value}\n"
+                    log += f"  Validation R²: {result['best_r2']:.4f}\n\n"
+
+                # Store tuned params in state
+                state.tuned_params = tuned_params
+
+                log += "=" * 80 + "\n"
+                log += "TUNING COMPLETE\n"
+                log += "=" * 80 + "\n"
+                log += "Use 'Start Training' to train with optimized hyperparameters.\n"
+
+                return log, f"✅ Tuned {len(tuned_params)} models! Ready to train."
+
+            except Exception as e:
+                import traceback
+                return f"Error during tuning:\n{str(e)}\n\n{traceback.format_exc()}", f"❌ Tuning failed: {str(e)}"
+
+        tune_btn.click(
+            fn=run_hyperparameter_tuning,
+            inputs=[feature_selector, models_selector, target_selector, horizons_selector],
+            outputs=[tuning_log, training_status]
+        )
 
         train_btn.click(
             fn=run_training,
