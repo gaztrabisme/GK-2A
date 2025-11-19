@@ -16,6 +16,7 @@ sys.path.append(str(Path(__file__).parent))
 from models.tree_models import TreeModelFactory, get_feature_importance
 from splits.split_strategies import DataSplitter
 from ensemble import VotingEnsemble
+from ensemble.stacking import StackingEnsemble
 sys.path.append(str(Path(__file__).parent.parent))
 from evaluation.metrics import evaluate_model, calculate_metrics
 
@@ -83,7 +84,10 @@ class TrainingEngine:
         target_name: str = "target",
         progress_callback: Optional[Callable] = None,
         enable_ensemble: bool = True,
-        model_params_dict: Optional[Dict[str, Dict]] = None
+        model_params_dict: Optional[Dict[str, Dict]] = None,
+        ensemble_type: str = 'voting',
+        meta_model_type: str = 'ridge',
+        sequence_ids_train: Optional[np.ndarray] = None
     ) -> Dict:
         """
         Train multiple models and compare results.
@@ -95,12 +99,15 @@ class TrainingEngine:
             model_names: List of model names to train
             target_name: Name of target variable (for saving)
             progress_callback: Optional function(message) to report progress
-            enable_ensemble: If True, create voting ensemble from trained models
+            enable_ensemble: If True, create ensemble from trained models
             model_params_dict: Optional dict mapping model names to hyperparameters
                               e.g., {'lightgbm': {'n_estimators': 300, 'num_leaves': 50}}
+            ensemble_type: 'voting' for simple averaging, 'stacking' for meta-model
+            meta_model_type: 'ridge' or 'lightgbm' (only used if ensemble_type='stacking')
+            sequence_ids_train: Sequence IDs for training data (required for stacking)
 
         Returns:
-            Dictionary mapping model names to results (includes 'ensemble' if enabled)
+            Dictionary mapping model names to results (includes 'ensemble'/'stacking' if enabled)
         """
         results = {}
         trained_models = {}
@@ -136,29 +143,133 @@ class TrainingEngine:
 
         # Create ensemble if enabled and we have multiple successful models
         if enable_ensemble and len(trained_models) >= 2:
-            if progress_callback:
-                progress_callback(f"Creating voting ensemble from {len(trained_models)} models...")
+            if ensemble_type == 'voting':
+                # Simple voting ensemble (averaging predictions)
+                if progress_callback:
+                    progress_callback(f"Creating voting ensemble from {len(trained_models)} models...")
 
-            try:
-                ensemble = VotingEnsemble(trained_models)
-                ensemble_metrics = ensemble.evaluate(X_train, y_train, X_test, y_test)
+                try:
+                    ensemble = VotingEnsemble(trained_models)
+                    ensemble_metrics = ensemble.evaluate(X_train, y_train, X_test, y_test)
 
-                results['ensemble'] = {
-                    'model': ensemble,
-                    'metrics': ensemble_metrics,
-                    'train_time': 0.0  # Ensemble uses pre-trained models
-                }
+                    results['ensemble'] = {
+                        'model': ensemble,
+                        'metrics': ensemble_metrics,
+                        'train_time': 0.0  # Ensemble uses pre-trained models
+                    }
+
+                    if progress_callback:
+                        progress_callback(
+                            f"✓ Voting Ensemble: Test RMSE={ensemble_metrics['test_rmse']:.4f}, "
+                            f"R²={ensemble_metrics['test_r2']:.4f}"
+                        )
+
+                except Exception as e:
+                    if progress_callback:
+                        progress_callback(f"✗ Voting ensemble failed: {str(e)}")
+                    results['ensemble'] = {'error': str(e)}
+
+            elif ensemble_type == 'stacking':
+                # Stacking ensemble (meta-model learns combination)
+                if sequence_ids_train is None:
+                    error_msg = "sequence_ids_train required for stacking ensemble"
+                    if progress_callback:
+                        progress_callback(f"✗ Stacking failed: {error_msg}")
+                    results['stacking'] = {'error': error_msg}
+                    return results
 
                 if progress_callback:
                     progress_callback(
-                        f"✓ Ensemble: Test RMSE={ensemble_metrics['test_rmse']:.4f}, "
-                        f"R²={ensemble_metrics['test_r2']:.4f}"
+                        f"Creating stacking ensemble ({meta_model_type} meta-model) "
+                        f"from {len(trained_models)} models..."
                     )
 
-            except Exception as e:
-                if progress_callback:
-                    progress_callback(f"✗ Ensemble failed: {str(e)}")
-                results['ensemble'] = {'error': str(e)}
+                try:
+                    # Create unfitted base models for stacking
+                    base_models = {}
+                    for model_name in trained_models.keys():
+                        model_params = model_params_dict.get(model_name) if model_params_dict else None
+                        base_models[model_name] = TreeModelFactory.create_model(model_name, model_params)
+
+                    # Create and train stacking ensemble
+                    stacking = StackingEnsemble(
+                        base_models=base_models,
+                        meta_model_type=meta_model_type,
+                        n_splits=3  # Use 3-fold CV for OOF predictions
+                    )
+
+                    start_time = time.time()
+                    stacking.train(X_train, y_train, sequence_ids_train, progress_callback=progress_callback)
+                    stacking_train_time = time.time() - start_time
+
+                    # Evaluate stacking ensemble
+                    y_train_pred = stacking.predict(X_train)
+                    y_test_pred = stacking.predict(X_test)
+
+                    from evaluation.metrics import calculate_metrics
+                    train_metrics = calculate_metrics(y_train, y_train_pred)
+                    test_metrics = calculate_metrics(y_test, y_test_pred)
+
+                    stacking_metrics = {
+                        'train_rmse': train_metrics['rmse'],
+                        'train_mae': train_metrics['mae'],
+                        'train_r2': train_metrics['r2'],
+                        'test_rmse': test_metrics['rmse'],
+                        'test_mae': test_metrics['mae'],
+                        'test_r2': test_metrics['r2'],
+                        'train_time': stacking_train_time
+                    }
+
+                    # Get meta-model weights
+                    meta_info = stacking.get_meta_model_info()
+
+                    # Safety check: Compare stacking vs best base model
+                    best_base_r2 = max(results[name]['metrics']['test_r2']
+                                      for name in trained_models.keys())
+                    best_base_name = max(trained_models.keys(),
+                                        key=lambda n: results[n]['metrics']['test_r2'])
+
+                    stacking_r2 = stacking_metrics['test_r2']
+
+                    # If stacking is significantly worse, use best base model instead
+                    if stacking_r2 < best_base_r2 - 0.05:  # 5% threshold
+                        if progress_callback:
+                            progress_callback(
+                                f"⚠️  Stacking R²={stacking_r2:.4f} < Best model ({best_base_name}) R²={best_base_r2:.4f}"
+                            )
+                            progress_callback(f"  → Using {best_base_name} instead of stacking (likely insufficient training data)")
+
+                        # Use best base model's results instead
+                        results['stacking'] = {
+                            'model': results[best_base_name]['model'],
+                            'metrics': results[best_base_name]['metrics'],
+                            'fallback_used': True,
+                            'fallback_from': best_base_name,
+                            'stacking_r2_failed': stacking_r2,
+                            'train_time': results[best_base_name]['metrics']['train_time']
+                        }
+                    else:
+                        # Stacking is good, use it
+                        results['stacking'] = {
+                            'model': stacking,
+                            'metrics': stacking_metrics,
+                            'meta_model_info': meta_info,
+                            'train_time': stacking_train_time
+                        }
+
+                        if progress_callback:
+                            progress_callback(
+                                f"✓ Stacking ({meta_model_type}): Test RMSE={stacking_metrics['test_rmse']:.4f}, "
+                                f"R²={stacking_metrics['test_r2']:.4f}"
+                            )
+                            progress_callback(f"  Meta-model weights: {meta_info['weights']}")
+
+                except Exception as e:
+                    if progress_callback:
+                        progress_callback(f"✗ Stacking ensemble failed: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    results['stacking'] = {'error': str(e)}
 
         return results
 

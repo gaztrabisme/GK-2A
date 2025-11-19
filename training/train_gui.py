@@ -393,6 +393,34 @@ def create_training_tab(
             value="No hyperparameters loaded. Using model defaults.",
         )
 
+        gr.Markdown("### Ensemble Configuration")
+
+        with gr.Row():
+            ensemble_type = gr.Radio(
+                choices=["Voting", "Stacking"],
+                value="Voting",
+                label="Ensemble Type",
+                info="Voting: Simple averaging. Stacking: Meta-model learns optimal combination"
+            )
+
+            meta_model_type = gr.Dropdown(
+                choices=["Ridge", "LightGBM"],
+                value="Ridge",
+                label="Meta-Model (Stacking only)",
+                info="Ridge: Interpretable weights. LightGBM: More powerful non-linear combination",
+                visible=False
+            )
+
+        # Show/hide meta-model dropdown based on ensemble type
+        def update_meta_model_visibility(ensemble_choice):
+            return gr.update(visible=(ensemble_choice == "Stacking"))
+
+        ensemble_type.change(
+            fn=update_meta_model_visibility,
+            inputs=[ensemble_type],
+            outputs=[meta_model_type]
+        )
+
         tuning_log = gr.Textbox(label="Tuning Log", lines=10, interactive=False)
         training_log = gr.Textbox(label="Training Log", lines=15, interactive=False)
         training_status = gr.Textbox(label="Status", interactive=False)
@@ -424,7 +452,7 @@ def create_training_tab(
                 outputs=[config_summary],
             )
 
-        def run_training(selected_features, selected_models, target, horizons):
+        def run_training(selected_features, selected_models, target, horizons, ensemble_choice, meta_model_choice):
             """Execute training with multi-horizon support"""
             try:
                 if state.full_data is None:
@@ -548,6 +576,10 @@ def create_training_tab(
                             )
                         )
 
+                        # Extract sequence IDs before split (needed for stacking)
+                        train_mask = df_curr['sequence_id'].isin(train_sequences).values
+                        sequence_ids_train = df_curr.loc[train_mask, 'sequence_id'].values
+
                         # Split into train/test
                         X_train, y_train, X_test, y_test = (
                             HorizonDataBuilder.split_by_sequences(
@@ -557,7 +589,11 @@ def create_training_tab(
 
                         log += f"\nDataset built:\n"
                         log += f"  Train: {X_train.shape[0]} samples\n"
-                        log += f"  Test: {X_test.shape[0]} samples\n\n"
+                        log += f"  Test: {X_test.shape[0]} samples\n"
+                        log += f"  Ensemble: {ensemble_choice}\n"
+                        if ensemble_choice == "Stacking":
+                            log += f"  Meta-model: {meta_model_choice}\n"
+                        log += "\n"
 
                         # Check if we have tuned hyperparameters
                         if state.tuned_params:
@@ -579,6 +615,9 @@ def create_training_tab(
                             progress_callback=progress_callback,
                             enable_ensemble=True,
                             model_params_dict=state.tuned_params,
+                            ensemble_type=ensemble_choice.lower(),
+                            meta_model_type=meta_model_choice.lower(),
+                            sequence_ids_train=sequence_ids_train,
                         )
 
                         # Store results with horizon keys
@@ -842,6 +881,8 @@ def create_training_tab(
                 models_selector,
                 target_selector,
                 horizons_selector,
+                ensemble_type,
+                meta_model_type,
             ],
             outputs=[training_log, training_status],
         )
