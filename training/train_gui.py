@@ -277,6 +277,13 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
             tune_btn = gr.Button("🔧 Tune Hyperparameters", variant="secondary", size="lg")
             train_btn = gr.Button("▶️ Start Training", variant="primary", size="lg")
 
+        with gr.Row():
+            n_trials_slider = gr.Slider(
+                minimum=10, maximum=200, value=50, step=10,
+                label="Number of Tuning Trials (More trials = better optimization, but slower)",
+                info="Recommended: 50-100 trials. Current: 50"
+            )
+
         tuning_log = gr.Textbox(label="Tuning Log", lines=10, interactive=False)
         training_log = gr.Textbox(label="Training Log", lines=15, interactive=False)
         training_status = gr.Textbox(label="Status", interactive=False)
@@ -465,7 +472,7 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                 import traceback
                 return f"Error during training:\n{str(e)}\n\n{traceback.format_exc()}", f"❌ Error: {str(e)}"
 
-        def run_hyperparameter_tuning(selected_features, selected_models, target, horizons):
+        def run_hyperparameter_tuning(selected_features, selected_models, target, horizons, n_trials):
             """Run hyperparameter tuning before training"""
             try:
                 if state.full_data is None:
@@ -505,7 +512,8 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                 log += f"Features: {len(feature_names)}\n"
                 log += f"Target: {target_col}\n"
                 log += f"Horizon: t+{horizon}\n"
-                log += f"Models: {', '.join(selected_models)}\n\n"
+                log += f"Models: {', '.join(selected_models)}\n"
+                log += f"Trials per model: {n_trials}\n\n"
 
                 # Build horizon dataset
                 X, y, idx_curr, idx_fut, df_curr, df_fut = HorizonDataBuilder.build_horizon_dataset(
@@ -554,7 +562,7 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
                         if trial_num % 10 == 0 or trial_num == 1:
                             log += f"  Trial {trial_num}: Best R² = {best_r2:.4f}\n"
 
-                    result = tuner.tune(X_train, y_train, X_val, y_val, n_trials=30, progress_callback=progress_callback)
+                    result = tuner.tune(X_train, y_train, X_val, y_val, n_trials=n_trials, progress_callback=progress_callback)
 
                     tuned_params[model_name] = result['best_params']
 
@@ -579,7 +587,7 @@ def create_training_tab(feature_selector, models_selector, target_selector, hori
 
         tune_btn.click(
             fn=run_hyperparameter_tuning,
-            inputs=[feature_selector, models_selector, target_selector, horizons_selector],
+            inputs=[feature_selector, models_selector, target_selector, horizons_selector, n_trials_slider],
             outputs=[tuning_log, training_status]
         )
 
