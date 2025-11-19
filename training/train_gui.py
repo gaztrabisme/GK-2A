@@ -62,7 +62,7 @@ def save_hyperparameters(params: dict, filename: str = None):
 
     HYPERPARAM_DIR.mkdir(parents=True, exist_ok=True)
 
-    with open(filename, 'w') as f:
+    with open(filename, "w") as f:
         json.dump(params, f, indent=2)
 
     return filename
@@ -78,12 +78,12 @@ def load_hyperparameters(filename: str = None):
     if not filename.exists():
         return None
 
-    with open(filename, 'r') as f:
+    with open(filename, "r") as f:
         params = json.load(f)
 
     # Remove metadata if present
-    if 'metadata' in params:
-        params = {k: v for k, v in params.items() if k != 'metadata'}
+    if "metadata" in params:
+        params = {k: v for k, v in params.items() if k != "metadata"}
 
     return params
 
@@ -379,7 +379,7 @@ def create_training_tab(
         with gr.Row():
             n_trials_slider = gr.Slider(
                 minimum=10,
-                maximum=500,
+                maximum=1000,
                 value=50,
                 step=10,
                 label="Number of Tuning Trials (More trials = better optimization, but slower)",
@@ -390,7 +390,7 @@ def create_training_tab(
             label="Current Hyperparameters",
             lines=3,
             interactive=False,
-            value="No hyperparameters loaded. Using model defaults."
+            value="No hyperparameters loaded. Using model defaults.",
         )
 
         tuning_log = gr.Textbox(label="Tuning Log", lines=10, interactive=False)
@@ -747,6 +747,7 @@ def create_training_tab(
                 # Auto-save tuned hyperparameters
                 try:
                     import datetime
+
                     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
                     # Save with timestamp
@@ -778,7 +779,11 @@ def create_training_tab(
                             hp_status += f"  {param_name}: {param_value}\n"
                     hp_status += "\n"
 
-                return log, f"✅ Tuned {len(tuned_params)} models! Saved to configs/", hp_status
+                return (
+                    log,
+                    f"✅ Tuned {len(tuned_params)} models! Saved to configs/",
+                    hp_status,
+                )
 
             except Exception as e:
                 import traceback
@@ -786,7 +791,7 @@ def create_training_tab(
                 return (
                     f"Error during tuning:\n{str(e)}\n\n{traceback.format_exc()}",
                     f"❌ Tuning failed: {str(e)}",
-                    "No hyperparameters loaded. Using model defaults."
+                    "No hyperparameters loaded. Using model defaults.",
                 )
 
         def load_best_hyperparameters():
@@ -911,7 +916,7 @@ def create_sweep_tab():
 
                 n_iterations = gr.Slider(
                     minimum=10,
-                    maximum=500,
+                    maximum=1000,
                     value=50,
                     step=10,
                     label="Number of Iterations",
