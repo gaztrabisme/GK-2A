@@ -1,15 +1,18 @@
 {
   "metadata": {
     "date": "2025-11-19",
-    "trials": 200,
+    "trials": 500,
     "validation_strategy": "3/3/2 sequence split",
-    "ensemble_r2_t1": 0.7809,
-    "ensemble_r2_t3": 0.7109,
-    "ensemble_r2_t6": 0.6893
+    "validation_r2": {
+      "random_forest": 0.7335,
+      "xgboost": 0.7205,
+      "lightgbm": 0.8281
+    },
+    "notes": "500 trials improved RF (+0.0026) and LGBM (+0.0037) over 200 trials"
   },
   "random_forest": {
-    "n_estimators": 156,
-    "max_depth": 30,
+    "n_estimators": 109,
+    "max_depth": 29,
     "min_samples_split": 20,
     "min_samples_leaf": 2,
     "max_features": 0.7
@@ -24,13 +27,13 @@
     "reg_lambda": 8.875525486162674
   },
   "lightgbm": {
-    "n_estimators": 427,
-    "num_leaves": 68,
-    "learning_rate": 0.13378069301236917,
-    "feature_fraction": 0.7713316086699948,
-    "bagging_fraction": 0.6981995719046562,
-    "min_child_samples": 47,
-    "reg_alpha": 0.00039159692418926323,
-    "reg_lambda": 9.721808710955484
+    "n_estimators": 451,
+    "num_leaves": 61,
+    "learning_rate": 0.11779763225652469,
+    "feature_fraction": 0.9752453416704422,
+    "bagging_fraction": 0.6521328329437464,
+    "min_child_samples": 49,
+    "reg_alpha": 0.06969197763385268,
+    "reg_lambda": 9.676858365430467
   }
 }
