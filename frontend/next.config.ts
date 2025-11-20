@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  allowedDevOrigins: [
+    "yarer-kaley-resolvedly.ngrok-free.dev",
+  ],
 };
 
 export default nextConfig;

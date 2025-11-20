@@ -80,3 +80,16 @@ frontend/node_modules/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+# References
+docs/TGE-YOLO
+
+# Training outputs (large files)
+tge_yolo_evaluation/runs/
+tge_yolo_evaluation/wandb/
+tge_yolo_hurricane/
+tge_yolo_evaluation/tge_yolo_hurricane/
+
+# Large result artifacts
+tge_yolo_evaluation/results/zero_shot*/
+tge_yolo_evaluation/results/transfer_learning/

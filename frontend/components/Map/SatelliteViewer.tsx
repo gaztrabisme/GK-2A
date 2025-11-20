@@ -79,7 +79,7 @@ export default function SatelliteViewer() {
       );
     }
 
-    // 3. Ground Truth Paths (White lines)
+    // 3. Ground Truth Paths (White dashed lines with endpoint circle)
     if (showActual) {
       const allHorizons: Horizon[] = ["t+1", "t+3", "t+6", "t+12"];
 
@@ -102,16 +102,45 @@ export default function SatelliteViewer() {
         });
 
         if (pathPoints.length > 1) {
+          // Draw white dashed line path (same style as predictions)
           layerList.push(
             new PathLayer({
               id: `actual-path-${trackId}`,
               data: [{ path: pathPoints }],
               pickable: false,
               widthScale: 1,
-              widthMinPixels: 2,
+              widthMinPixels: 1,
+              getDashArray: [5, 3], // Dashed line like predictions
               getPath: (d) => d.path,
               getColor: ACTUAL_COLOR,
-              getWidth: 2,
+              getWidth: 1.5,
+            })
+          );
+
+          // Draw white circle at final endpoint only
+          const endpoint = pathPoints[pathPoints.length - 1];
+          layerList.push(
+            new ScatterplotLayer({
+              id: `actual-endpoint-${trackId}`,
+              data: [
+                {
+                  position: endpoint,
+                  color: ACTUAL_COLOR,
+                },
+              ],
+              pickable: true,
+              opacity: 0.9,
+              stroked: true,
+              filled: true,
+              radiusScale: 1,
+              radiusMinPixels: 6,
+              radiusMaxPixels: 15,
+              lineWidthMinPixels: 2,
+              getPosition: (d) => d.position,
+              getRadius: 8,
+              getFillColor: (d) => [...d.color, 200],
+              getLineColor: (d) => d.color,
+              getLineWidth: 2,
             })
           );
         }

@@ -1,0 +1,23 @@
+TGE-YOLO Test Set Evaluation Results
+============================================================
+
+Model: /Users/GaryT/Documents/Work/AI/Research/USAC/GK-2A/tge_yolo_evaluation/tge_yolo_hurricane/transfer_learning/weights/best.pt
+Dataset: Hurricane.v3i.yolov8 (GOES-18)
+Split: test (123 images, ~252 instances)
+
+TEST SET METRICS:
+  mAP@0.5      : 0.9023
+  mAP@0.5:0.95 : 0.6630
+  Precision    : 0.8348
+  Recall       : 0.8770
+
+VALIDATION vs TEST:
+  mAP@0.5:      Val=0.9240, Test=0.9023, Diff=-0.0217
+  mAP@0.5:0.95: Val=0.6560, Test=0.6630, Diff=+0.0070
+  Precision:    Val=0.8730, Test=0.8348, Diff=-0.0382
+  Recall:       Val=0.8770, Test=0.8770, Diff=-0.0000
+
+COMPARISON WITH ORIGINAL:
+  Original (Typhoons):  0.8780
+  Transfer (Hurricanes): 0.9023
+  Improvement: +2.8%
